@@ -200,6 +200,8 @@ class SkillRepository:
             "static_summary": skill.static_summary,
             "admission_reasons": skill.admission_reasons or [],
             "warnings": skill.warnings or [],
+            "score_total": getattr(skill, "score_total", None),
+            "grade": getattr(skill, "grade", None),
         }
         
         return scrub(skill_dict)

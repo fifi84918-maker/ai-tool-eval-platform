@@ -14,6 +14,8 @@ class SkillSummaryOut(BaseModel):
     origin_url: str
     description: str | None
     evidence_grade: str
+    score_total: float | None = None
+    grade: str | None = None
 
 
 class SkillDetailOut(BaseModel):

@@ -28,7 +28,18 @@ def search_skills(
     # Non-empty query: filter results
     all_results = index.search(q or "", limit=limit + offset)
     paginated = all_results[offset:offset + limit]
-    return [scrub(s) for s in paginated]
+    
+    # Add score/grade fields (None if not present)
+    results = []
+    for skill in paginated:
+        scrubbed = scrub(skill)
+        if "score_total" not in scrubbed:
+            scrubbed["score_total"] = None
+        if "grade" not in scrubbed:
+            scrubbed["grade"] = None
+        results.append(scrubbed)
+    
+    return results
 
 
 @router.get("/{skill_id}", response_model=SkillDetailOut, responses={404: {"model": ErrorOut}})
@@ -50,6 +61,14 @@ def get_skill_detail(
         pass
     
     scrubbed_detail = scrub(detail)
+    
+    # Ensure summary has score/grade fields
+    if "summary" in scrubbed_detail:
+        if "score_total" not in scrubbed_detail["summary"]:
+            scrubbed_detail["summary"]["score_total"] = None
+        if "grade" not in scrubbed_detail["summary"]:
+            scrubbed_detail["summary"]["grade"] = None
+    
     return {
         **scrubbed_detail,
         "json_ld": json_ld,

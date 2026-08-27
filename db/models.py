@@ -3,7 +3,7 @@
 from datetime import datetime
 from typing import Optional
 
-from sqlalchemy import JSON, Boolean, DateTime, Integer, String, Text
+from sqlalchemy import JSON, Boolean, DateTime, Float, Integer, String, Text
 from sqlalchemy.orm import Mapped, mapped_column
 
 from db import Base
@@ -44,6 +44,10 @@ class Skill(Base):
     # Admission and warnings
     admission_reasons: Mapped[Optional[dict]] = mapped_column(JSON, nullable=True)
     warnings: Mapped[Optional[dict]] = mapped_column(JSON, nullable=True)
+    
+    # Scoring (Task 18)
+    score_total: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
+    grade: Mapped[Optional[str]] = mapped_column(String(2), nullable=True)
     
     # Timestamps
     created_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, default=datetime.utcnow)
