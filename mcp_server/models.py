@@ -1,16 +1,10 @@
-"""对外 DTO：序列化友好的 dataclass（asdict 即 JSON-able）。
+"""模型数据输出：序列化友好的 Skill JSON-LD 调用必须的返回结构。"""
 
-字段白名单原则：这里没有的字段就不会出去（policy.py 再做兜底过滤）。
-"""
-
-from dataclasses import asdict, dataclass, field
-from typing import Any
+from typing import Any, TypedDict
 
 
-@dataclass(frozen=True)
-class SkillSummary:
+class SkillSummary(TypedDict):
     """搜索结果条目：最小元数据。"""
-
     skill_id: str
     canonical_name: str
     entity_type: str
@@ -21,10 +15,8 @@ class SkillSummary:
     evidence_grade: str        # 本期数据源恒为 "D" 或 "U"
 
 
-@dataclass(frozen=True)
-class SkillDetail:
+class SkillDetail(TypedDict):
     """单 Skill 详情：摘要 + 声明面元数据（无正文）。"""
-
     summary: SkillSummary
     author: str | None
     license_spdx: str | None
@@ -34,13 +26,10 @@ class SkillDetail:
     static_summary: dict[str, int] | None      # 静态检测结论计数（无 finding 正文）
     admission_reasons: tuple[str, ...]
     warnings: tuple[str, ...]
-    bundle_hint: None = None                   # D-010 预留；Phase 1 聚合
 
 
-@dataclass(frozen=True)
-class ArtifactRefDTO:
+class ArtifactRefDTO(TypedDict):
     """制品引用：只有指针与摘要，绝无内容（D-005）。"""
-
     bucket: str
     key: str
     sha256: str
@@ -48,18 +37,19 @@ class ArtifactRefDTO:
     summary: str | None
 
 
-@dataclass(frozen=True)
-class TrialReportSummary:
+class TrialReportSummary(TypedDict):
     """Phase 0 试评报告的脱敏投影。"""
-
     trial_id: str
     generated_at: str
     sample_count: int
     all_matched_expectation: bool
     compliance: dict[str, Any]
-    entries: tuple[dict[str, Any], ...] = field(default_factory=tuple)
+    entries: tuple[dict[str, Any], ...]
 
 
 def to_json_dict(dto: Any) -> dict:
-    """dataclass → JSON-able dict。"""
-    return asdict(dto)
+    """TypedDict/dict → JSON-able dict。TypedDict 本身就是 dict，直接返回。"""
+    if isinstance(dto, dict):
+        return dto
+    # 如果是其他类型（如 dataclass），需要其他处理
+    raise TypeError(f"Unsupported type for to_json_dict: {type(dto)}")

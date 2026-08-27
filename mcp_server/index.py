@@ -7,7 +7,7 @@ TODO(真实数据源)：Phase 1 接 PostgreSQL 数据层后替换为 DB 索引�
 from dataclasses import dataclass, field
 
 from mcp_server.models import ArtifactRefDTO, SkillDetail, SkillSummary
-from mcp_server.policy import clamp_evidence_grade
+from mcp_server.policy import clamp_evidence_grade, scrub
 from orchestrator.pipeline import run as run_pipeline
 from orchestrator.pipeline import SkillReviewPipeline
 from sandbox.runner import LocalSimRunner
@@ -22,6 +22,7 @@ class _OfflineStubClient:
 @dataclass(frozen=True)
 class _IndexEntry:
     summary: SkillSummary
+    
     detail: SkillDetail
     artifacts: tuple[ArtifactRefDTO, ...]
     search_blob: str = field(default="")
@@ -101,7 +102,7 @@ def _build_entry(sample: TrialSample) -> _IndexEntry:
         for ref in adapter.fetch_artifact_refs(sample.raw_item)
     )
     blob = " ".join(
-        filter(None, [summary.canonical_name, description or "", summary.skill_id])
+        filter(None, [summary["canonical_name"], description or "", summary["skill_id"]])
     ).lower()
     return _IndexEntry(summary=summary, detail=detail, artifacts=artifacts, search_blob=blob)
 
@@ -113,9 +114,10 @@ class InMemorySkillIndex:
         self._entries: dict[str, _IndexEntry] = {}
         for sample in samples:
             entry = _build_entry(sample)
-            self._entries[entry.summary.skill_id] = entry
+            self._entries[entry.summary["skill_id"]] = entry
 
     def search(self, query: str, limit: int = 10) -> tuple[SkillSummary, ...]:
+        """从样本返回 SkillSummary，而不是 _IndexEntry。"""
         q = query.strip().lower()
         if not q:
             return tuple(e.summary for e in self._entries.values())[:limit]
@@ -124,6 +126,7 @@ class InMemorySkillIndex:
         )[:limit]
 
     def get(self, skill_id: str) -> SkillDetail | None:
+        """从样本中返回 SkillDetail，填充缺失字段。"""
         entry = self._entries.get(skill_id)
         return entry.detail if entry else None
 

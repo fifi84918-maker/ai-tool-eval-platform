@@ -22,14 +22,17 @@ def search_skills(index: InMemorySkillIndex, query: str, limit: int = 10) -> dic
         {
             "query": query,
             "count": len(results),
-            "results": [to_json_dict(s) for s in results],
+            "results": [
+                to_json_dict(s)
+                for s in results
+            ],
             "note": "install/inspect via origin_url only; no file downloads (D-005)",
         }
     )
 
 
 def get_skill(index: InMemorySkillIndex, skill_id: str) -> dict:
-    detail = index.get(skill_id)
+    detail = index.get(skill_id)  # 由 index.get 获取所需的 SkillDetail.
     if detail is None:
         raise McpToolError("skill_not_found", f"unknown skill_id: {skill_id}")
     return scrub(to_json_dict(detail))
@@ -39,13 +42,14 @@ def get_skill_artifacts(index: InMemorySkillIndex, skill_id: str) -> dict:
     artifacts = index.get_artifacts(skill_id)
     if artifacts is None:
         raise McpToolError("skill_not_found", f"unknown skill_id: {skill_id}")
-    return scrub(
-        {
-            "skill_id": skill_id,
-            "artifacts": [to_json_dict(a) for a in artifacts],
-            "note": "references only (bucket/key/sha256); content is never served",
-        }
-    )
+    return scrub({
+        "skill_id": skill_id,
+        "artifacts": [
+            to_json_dict(a)
+            for a in artifacts
+        ],
+        "note": "references only (bucket/key/sha256); content is never served",
+    })
 
 
 def get_trial_report(report_path: Path) -> dict:
@@ -59,18 +63,6 @@ def get_trial_report(report_path: Path) -> dict:
     except (OSError, json.JSONDecodeError) as exc:
         raise McpToolError("report_unreadable", f"{type(exc).__name__}: {exc}") from None
 
-    entries = [
-        {
-            "sample_id": e.get("sample_id"),
-            "label": e.get("label"),
-            "skill_id": e.get("skill_id"),
-            "status_after": e.get("status_after"),
-            "matched_expectation": e.get("matched_expectation"),
-            "non_isolated": e.get("non_isolated"),
-            "evidence_grade_cap": clamp_evidence_grade(e.get("evidence_grade_cap")),
-        }
-        for e in raw.get("entries", [])
-    ]
     return scrub(
         {
             "trial_id": raw.get("trial_id"),
@@ -78,6 +70,17 @@ def get_trial_report(report_path: Path) -> dict:
             "sample_count": raw.get("sample_count"),
             "all_matched_expectation": raw.get("all_matched_expectation"),
             "compliance": raw.get("compliance", {}),
-            "entries": entries,
+            "entries": [
+                {
+                    "sample_id": e.get("sample_id"),
+                    "label": e.get("label"),
+                    "skill_id": e.get("skill_id"),
+                    "status_after": e.get("status_after"),
+                    "matched_expectation": e.get("matched_expectation"),
+                    "non_isolated": e.get("non_isolated"),
+                    "evidence_grade_cap": clamp_evidence_grade(e.get("evidence_grade_cap")),
+                }
+                for e in raw.get("entries", [])
+            ],
         }
     )
