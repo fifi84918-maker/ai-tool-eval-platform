@@ -2,6 +2,8 @@
 
 import { useState } from 'react'
 import Link from 'next/link'
+import GradeBadge from '@/components/skill/GradeBadge'
+import ScoreBar from '@/components/skill/ScoreBar'
 
 interface SkillSummary {
   skill_id: string
@@ -10,6 +12,8 @@ interface SkillSummary {
   evidence_grade: string
   description: string | null
   origin_url: string
+  score_total?: number | null
+  grade?: string | null
 }
 
 export default function HomePage() {
@@ -68,9 +72,12 @@ export default function HomePage() {
           >
             <div className="flex items-start justify-between">
               <div className="flex-1">
-                <h2 className="text-lg font-semibold text-gray-900">
-                  {skill.canonical_name}
-                </h2>
+                <div className="flex items-center gap-2">
+                  <h2 className="text-lg font-semibold text-gray-900">
+                    {skill.canonical_name}
+                  </h2>
+                  <GradeBadge grade={skill.grade} />
+                </div>
                 <p className="text-sm text-gray-500 mt-1 font-mono">
                   {skill.skill_id.substring(0, 16)}...
                 </p>
@@ -79,6 +86,9 @@ export default function HomePage() {
                     {skill.description}
                   </p>
                 )}
+                <div className="mt-3">
+                  <ScoreBar score={skill.score_total} />
+                </div>
               </div>
               <div className="ml-4 flex flex-col gap-2">
                 <span className={`px-3 py-1 text-xs font-medium rounded-full ${

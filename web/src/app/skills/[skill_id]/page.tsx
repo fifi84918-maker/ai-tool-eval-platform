@@ -1,3 +1,6 @@
+import GradeBadge from '@/components/skill/GradeBadge'
+import ScoreBar from '@/components/skill/ScoreBar'
+
 interface SkillDetail {
   summary: {
     skill_id: string
@@ -7,6 +10,8 @@ interface SkillDetail {
     source_kind: string
     origin_url: string
     description: string | null
+    score_total?: number | null
+    grade?: string | null
   }
   author: string | null
   license_spdx: string | null
@@ -56,9 +61,12 @@ export default async function SkillDetailPage({
       <div className="bg-white p-6 rounded-lg shadow">
         <div className="flex items-start justify-between mb-4">
           <div>
-            <h1 className="text-2xl font-bold text-gray-900">
-              {skill.summary.canonical_name}
-            </h1>
+            <div className="flex items-center gap-2">
+              <h1 className="text-2xl font-bold text-gray-900">
+                {skill.summary.canonical_name}
+              </h1>
+              <GradeBadge grade={skill.summary.grade} />
+            </div>
             <p className="text-sm text-gray-500 mt-1 font-mono">
               {skill.summary.skill_id}
             </p>
@@ -78,6 +86,13 @@ export default async function SkillDetailPage({
             </span>
           </div>
         </div>
+
+        {skill.summary.score_total !== null && skill.summary.score_total !== undefined && (
+          <div className="mb-6">
+            <h3 className="text-sm font-medium text-gray-500 mb-2">Quality Score</h3>
+            <ScoreBar score={skill.summary.score_total} />
+          </div>
+        )}
 
         <div className="grid grid-cols-2 gap-4 mt-6">
           <div>
