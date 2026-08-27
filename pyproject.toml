@@ -3,7 +3,9 @@ name = "ai-tool-eval-platform"
 version = "0.0.0"
 description = "AI Skill Benchmark 评测与推荐平台（Phase 0 骨架，无业务代码）"
 requires-python = ">=3.12"
-dependencies = []
+dependencies = [
+    "mcp>=2.1.1",
+]
 
 # uv workspace 根配置。
 # 各 Python 模块（collector/core/analyzer/sandbox/scoring/backend）转为独立包时
