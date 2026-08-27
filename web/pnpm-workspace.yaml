@@ -1,0 +1,5 @@
+# This is a standalone Next.js project, not a monorepo
+packages:
+  - '.'
+allowBuilds:
+  unrs-resolver: set this to true or false
