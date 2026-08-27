@@ -136,3 +136,159 @@ class InMemorySkillIndex:
 
     def __len__(self) -> int:
         return len(self._entries)
+
+
+class DatabaseSkillIndex:
+    """Database-backed skill index using PostgreSQL.
+    
+    Implements the same interface as InMemorySkillIndex for drop-in replacement.
+    Uses SkillRepository for all database operations with policy enforcement.
+    """
+    
+    def __init__(self, session_factory=None):
+        """Initialize database index.
+        
+        Args:
+            session_factory: Optional SQLAlchemy sessionmaker.
+                            If None, creates from db module.
+        """
+        if session_factory is None:
+            from db import SessionLocal
+            session_factory = SessionLocal
+        
+        self.session_factory = session_factory
+    
+    def search(self, query: str, limit: int = 10) -> tuple[SkillSummary, ...]:
+        """Search skills in database.
+        
+        Args:
+            query: Search query string
+            limit: Max results
+            
+        Returns:
+            Tuple of SkillSummary dicts
+        """
+        from db.repository import SkillRepository
+        
+        with self.session_factory() as session:
+            repo = SkillRepository(session)
+            skills, _ = repo.list_skills(query=query, limit=limit, offset=0)
+            
+            # Convert to SkillSummary TypedDict
+            return tuple(
+                SkillSummary(
+                    skill_id=s["skill_id"],
+                    canonical_name=s["canonical_name"],
+                    entity_type=s["entity_type"],
+                    status=s["status"],
+                    source_kind=s["source_kind"],
+                    origin_url=s["origin_url"],
+                    description=s["description"],
+                    evidence_grade=s["evidence_grade"],
+                )
+                for s in skills
+            )
+    
+    def get(self, skill_id: str) -> SkillDetail | None:
+        """Get skill detail from database.
+        
+        Args:
+            skill_id: Skill identifier
+            
+        Returns:
+            SkillDetail dict or None
+        """
+        from db.repository import SkillRepository
+        
+        with self.session_factory() as session:
+            repo = SkillRepository(session)
+            skill = repo.get_skill(skill_id)
+            
+            if skill is None:
+                return None
+            
+            # Convert to SkillDetail TypedDict
+            summary = SkillSummary(
+                skill_id=skill["skill_id"],
+                canonical_name=skill["canonical_name"],
+                entity_type=skill["entity_type"],
+                status=skill["status"],
+                source_kind=skill["source_kind"],
+                origin_url=skill["origin_url"],
+                description=skill["description"],
+                evidence_grade=skill["evidence_grade"],
+            )
+            
+            return SkillDetail(
+                summary=summary,
+                author=skill["author"],
+                license_spdx=skill["license_spdx"],
+                declared_permissions=tuple(skill["declared_permissions"]),
+                category_tags=tuple(skill["category_tags"]),
+                is_alive=skill["is_alive"],
+                static_summary=skill["static_summary"],
+                admission_reasons=tuple(skill["admission_reasons"]),
+                warnings=tuple(skill["warnings"]),
+            )
+    
+    def get_artifacts(self, skill_id: str) -> tuple[ArtifactRefDTO, ...] | None:
+        """Get artifact references from database.
+        
+        Args:
+            skill_id: Skill identifier
+            
+        Returns:
+            Tuple of ArtifactRefDTO or None
+        """
+        from db.repository import SkillRepository
+        
+        with self.session_factory() as session:
+            repo = SkillRepository(session)
+            refs = repo.get_artifact_references(skill_id)
+            
+            if not refs:
+                return None
+            
+            return tuple(
+                ArtifactRefDTO(
+                    bucket=ref["bucket"],
+                    key=ref["key"],
+                    sha256=ref["sha256"],
+                    size_bytes=ref["size_bytes"],
+                    summary=ref["summary"],
+                )
+                for ref in refs
+            )
+
+
+def get_index_with_fallback():
+    """Get skill index with automatic fallback to in-memory.
+    
+    Returns DatabaseSkillIndex if DATABASE_URL is set and connection succeeds,
+    otherwise falls back to InMemorySkillIndex with warning.
+    """
+    import os
+    import warnings
+    
+    database_url = os.getenv("DATABASE_URL")
+    
+    if not database_url:
+        warnings.warn(
+            "DATABASE_URL not set, using InMemorySkillIndex fallback",
+            RuntimeWarning,
+        )
+        return InMemorySkillIndex()
+    
+    try:
+        # Test database connection
+        from db import engine
+        with engine.connect() as conn:
+            conn.execute("SELECT 1")  # type: ignore
+        
+        return DatabaseSkillIndex()
+    except Exception as e:
+        warnings.warn(
+            f"Database connection failed ({e}), using InMemorySkillIndex fallback",
+            RuntimeWarning,
+        )
+        return InMemorySkillIndex()
