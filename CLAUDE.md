@@ -88,3 +88,11 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - CI：GitHub Actions，推远端时再配置
 - 范围：frontend/ 和 backend/ 目录在 Task 02 建骨架但不写业务代码
 - 文档冲突裁决：PRD > 商业计划书 > 技术方案
+
+## 准入判定规则（Task 05 评审确认）
+- analyzer.has_fail 只是信号，不直接触发状态转移
+- secrets FAIL → STATIC_BLOCKED（进 QUARANTINED）
+- structure FAIL → WARN，允许继续到沙箱
+- 其余 FAIL → NEED_REVIEW（人工复核）
+- 三权利位全 NEED_INFO → 禁止进动态测试（D-008 合规红线）
+- 以上映射由后续编排层（Task 06/07）实现，analyzer 层不负责
