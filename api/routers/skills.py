@@ -19,8 +19,14 @@ def search_skills(
     offset: int = Query(0, ge=0, description="Skip count"),
     index: InMemorySkillIndex = Depends(get_index),
 ):
-    """Search skills with pagination."""
-    all_results = index.search(q, limit=limit + offset)
+    """Search skills with pagination.
+    
+    When query is empty, returns all skills (default list).
+    When query is provided, filters by name/description.
+    """
+    # Empty query: return default list (all skills)
+    # Non-empty query: filter results
+    all_results = index.search(q or "", limit=limit + offset)
     paginated = all_results[offset:offset + limit]
     return [scrub(s) for s in paginated]
 
