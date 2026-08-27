@@ -7,6 +7,7 @@ __pycache__/
 *.pyc
 # 隐藏测试集私有目录（PRD 14.3 防泄露；独立私有仓库存放，此处确保误放本地时不被提交）
 .ai-benchmark-private/
+benchmarks/
 .DS_Store
 Thumbs.db
 
