@@ -10,3 +10,12 @@ dependencies = []
 # 在此登记 members；Phase 0 暂不拆分、不安装依赖。
 [tool.uv.workspace]
 members = []
+
+[dependency-groups]
+dev = [
+    "pytest>=9.1.1",
+]
+
+[tool.pytest.ini_options]
+pythonpath = ["."]
+testpaths = ["tests"]

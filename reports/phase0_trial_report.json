@@ -1,0 +1,321 @@
+{
+  "trial_id": "phase0-trial-v1",
+  "generated_at": "2026-08-27T05:03:56.161055+00:00",
+  "compliance": {
+    "no_artifact_content_fetched": true,
+    "no_real_network": true,
+    "sandbox_non_isolated": true,
+    "warning": "results are shape-validation, not evidence",
+    "evidence_grades_allowed": [
+      "D",
+      "U"
+    ]
+  },
+  "sample_count": 5,
+  "all_matched_expectation": true,
+  "entries": [
+    {
+      "sample_id": "S1-green",
+      "label": "结构合规正面样本：全绿至 NEUTRAL_TESTED",
+      "skill_id": "219c93e5365609e6060c9afe1d88571324b4fff1a518f16f75353b0cab159733",
+      "canonical_name": "doc-skill",
+      "status_before": "DISCOVERED",
+      "status_after": "NEUTRAL_TESTED",
+      "expected_final_status": "NEUTRAL_TESTED",
+      "matched_expectation": true,
+      "stages": [
+        {
+          "name": "collect",
+          "ok": true,
+          "skipped": false,
+          "error": null
+        },
+        {
+          "name": "static_review",
+          "ok": true,
+          "skipped": false,
+          "error": null
+        },
+        {
+          "name": "admission",
+          "ok": true,
+          "skipped": false,
+          "error": null
+        },
+        {
+          "name": "sandbox",
+          "ok": true,
+          "skipped": false,
+          "error": null
+        }
+      ],
+      "static_summary": {
+        "pass": 10,
+        "fail": 0,
+        "warn": 0,
+        "info": 0,
+        "need_info": 3
+      },
+      "admission": {
+        "proceed_to_sandbox": true,
+        "needs_manual_review": false,
+        "reasons": []
+      },
+      "sandbox": {
+        "runner": "local-sim",
+        "isolated": false,
+        "all_assertions_passed": true
+      },
+      "non_isolated": true,
+      "evidence_grade_cap": "D",
+      "bundle_hint": null,
+      "warnings": [
+        "sandbox runner is NOT isolated (local-sim, dev only); results are shape-validation, not evidence"
+      ],
+      "notes": []
+    },
+    {
+      "sample_id": "S2-no-skillmd",
+      "label": "结构缺失样本：无 SKILL.md，structure FAIL 降级 WARN 继续",
+      "skill_id": "0766e96cdeb4121ba7aeac64bcc1fe4a0ab46563a70805f0d2d0767b19eb8e31",
+      "canonical_name": "loose-repo",
+      "status_before": "DISCOVERED",
+      "status_after": "NEUTRAL_TESTED",
+      "expected_final_status": "NEUTRAL_TESTED",
+      "matched_expectation": true,
+      "stages": [
+        {
+          "name": "collect",
+          "ok": true,
+          "skipped": false,
+          "error": null
+        },
+        {
+          "name": "static_review",
+          "ok": true,
+          "skipped": false,
+          "error": null
+        },
+        {
+          "name": "admission",
+          "ok": true,
+          "skipped": false,
+          "error": null
+        },
+        {
+          "name": "sandbox",
+          "ok": true,
+          "skipped": false,
+          "error": null
+        }
+      ],
+      "static_summary": {
+        "pass": 9,
+        "fail": 1,
+        "warn": 0,
+        "info": 0,
+        "need_info": 3
+      },
+      "admission": {
+        "proceed_to_sandbox": true,
+        "needs_manual_review": false,
+        "reasons": [
+          "structure FAIL downgraded to WARN: struct.skill_md_present"
+        ]
+      },
+      "sandbox": {
+        "runner": "local-sim",
+        "isolated": false,
+        "all_assertions_passed": true
+      },
+      "non_isolated": true,
+      "evidence_grade_cap": "D",
+      "bundle_hint": null,
+      "warnings": [
+        "structure FAIL downgraded to WARN: struct.skill_md_present",
+        "sandbox runner is NOT isolated (local-sim, dev only); results are shape-validation, not evidence"
+      ],
+      "notes": [
+        "structure FAIL -> WARN by Task 05 mapping"
+      ]
+    },
+    {
+      "sample_id": "S3-highrisk-perms",
+      "label": "高风险权限样本：declare delete/shell，WARN 继续",
+      "skill_id": "ebadf9efabceaa60a7a24e385ffed84b288ec017f62848b3485494beadfcbe96",
+      "canonical_name": "cleaner-skill",
+      "status_before": "DISCOVERED",
+      "status_after": "NEUTRAL_TESTED",
+      "expected_final_status": "NEUTRAL_TESTED",
+      "matched_expectation": true,
+      "stages": [
+        {
+          "name": "collect",
+          "ok": true,
+          "skipped": false,
+          "error": null
+        },
+        {
+          "name": "static_review",
+          "ok": true,
+          "skipped": false,
+          "error": null
+        },
+        {
+          "name": "admission",
+          "ok": true,
+          "skipped": false,
+          "error": null
+        },
+        {
+          "name": "sandbox",
+          "ok": true,
+          "skipped": false,
+          "error": null
+        }
+      ],
+      "static_summary": {
+        "pass": 9,
+        "fail": 0,
+        "warn": 1,
+        "info": 0,
+        "need_info": 3
+      },
+      "admission": {
+        "proceed_to_sandbox": true,
+        "needs_manual_review": false,
+        "reasons": []
+      },
+      "sandbox": {
+        "runner": "local-sim",
+        "isolated": false,
+        "all_assertions_passed": true
+      },
+      "non_isolated": true,
+      "evidence_grade_cap": "D",
+      "bundle_hint": null,
+      "warnings": [
+        "sandbox runner is NOT isolated (local-sim, dev only); results are shape-validation, not evidence"
+      ],
+      "notes": [
+        "high-risk perms only WARN at admission; human confirm is runtime concern (D-012)"
+      ]
+    },
+    {
+      "sample_id": "S4-d008-rights",
+      "label": "D-008 样本：三权利位 None，禁入沙箱停 STATIC_REVIEWED",
+      "skill_id": "b52777c216938ecaaf75d14393419ebb21d752d6f3bd2954e33bbf7a42485d88",
+      "canonical_name": "unknown-license",
+      "status_before": "DISCOVERED",
+      "status_after": "STATIC_REVIEWED",
+      "expected_final_status": "STATIC_REVIEWED",
+      "matched_expectation": true,
+      "stages": [
+        {
+          "name": "collect",
+          "ok": true,
+          "skipped": false,
+          "error": null
+        },
+        {
+          "name": "static_review",
+          "ok": true,
+          "skipped": false,
+          "error": null
+        },
+        {
+          "name": "admission",
+          "ok": true,
+          "skipped": false,
+          "error": null
+        },
+        {
+          "name": "sandbox",
+          "ok": true,
+          "skipped": true,
+          "error": null
+        }
+      ],
+      "static_summary": {
+        "pass": 9,
+        "fail": 0,
+        "warn": 0,
+        "info": 0,
+        "need_info": 4
+      },
+      "admission": {
+        "proceed_to_sandbox": false,
+        "needs_manual_review": false,
+        "reasons": [
+          "all three license rights NEED_INFO -> dynamic testing forbidden (D-008)"
+        ]
+      },
+      "sandbox": null,
+      "non_isolated": true,
+      "evidence_grade_cap": "U",
+      "bundle_hint": null,
+      "warnings": [
+        "all three license rights NEED_INFO -> dynamic testing forbidden (D-008)"
+      ],
+      "notes": []
+    },
+    {
+      "sample_id": "S5-secrets",
+      "label": "secrets 命中样本：元数据含凭证字面量（构造假值）→ QUARANTINED",
+      "skill_id": "c2025e6a6d0d23aa57da5beb1fd95ceb65cc6c52e4caaca6ed0a213508ea7dd7",
+      "canonical_name": "leaky-skill",
+      "status_before": "DISCOVERED",
+      "status_after": "QUARANTINED",
+      "expected_final_status": "QUARANTINED",
+      "matched_expectation": true,
+      "stages": [
+        {
+          "name": "collect",
+          "ok": true,
+          "skipped": false,
+          "error": null
+        },
+        {
+          "name": "static_review",
+          "ok": true,
+          "skipped": false,
+          "error": null
+        },
+        {
+          "name": "admission",
+          "ok": true,
+          "skipped": false,
+          "error": null
+        },
+        {
+          "name": "sandbox",
+          "ok": true,
+          "skipped": true,
+          "error": null
+        }
+      ],
+      "static_summary": {
+        "pass": 8,
+        "fail": 1,
+        "warn": 1,
+        "info": 0,
+        "need_info": 3
+      },
+      "admission": {
+        "proceed_to_sandbox": false,
+        "needs_manual_review": false,
+        "reasons": [
+          "secrets heuristic FAIL -> STATIC_BLOCKED (quarantine)"
+        ]
+      },
+      "sandbox": null,
+      "non_isolated": true,
+      "evidence_grade_cap": "U",
+      "bundle_hint": null,
+      "warnings": [
+        "secrets heuristic FAIL -> STATIC_BLOCKED (quarantine)"
+      ],
+      "notes": []
+    }
+  ]
+}

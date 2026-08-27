@@ -9,3 +9,7 @@ __pycache__/
 .ai-benchmark-private/
 .DS_Store
 Thumbs.db
+
+# Phase 0 trial reports (only baseline committed)
+reports/
+
