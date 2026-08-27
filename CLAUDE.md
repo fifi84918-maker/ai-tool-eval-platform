@@ -74,3 +74,17 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - 一切实施工作以用户确认的 Task 编号为准（Task 01 起），未确认不动手
 - 文档间冲突时按 PRD > 商业计划书 > 技术方案裁决，并向用户指出冲突点
 - 不把 `D:\新建文件夹` 下的任何内容作为本项目的一部分
+
+## 已确认技术决策（Task 01 评审结果）
+
+> 状态更新（覆盖上文过时表述）：首次 commit `6de3aac`（master）已包含 `docs/` 与本文件；Task 01（规划）已完成评审。当前仍为 Phase 0，业务代码在 Task 02 确认前不动。
+
+- Python 工具链：uv（单一 workspace，lockfile 共享）
+- 前端包管理：pnpm
+- 数据库：PostgreSQL 16 + SQLAlchemy 2.0 + Alembic
+- 对象存储：本地 MinIO（docker-compose），生产待定
+- Redis：Phase 1 再引入，Phase 0 不使用
+- 隐藏测试集：独立私有仓库，公共仓库 .gitignore 排除
+- CI：GitHub Actions，推远端时再配置
+- 范围：frontend/ 和 backend/ 目录在 Task 02 建骨架但不写业务代码
+- 文档冲突裁决：PRD > 商业计划书 > 技术方案
