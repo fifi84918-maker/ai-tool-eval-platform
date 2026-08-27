@@ -5,6 +5,10 @@ description = "AI Skill Benchmark 评测与推荐平台（Phase 0 骨架，无�
 requires-python = ">=3.12"
 dependencies = [
     "mcp>=2.1.1",
+    "sqlalchemy>=2.0",
+    "fastapi>=0.115.0",
+    "uvicorn>=0.32.0",
+    "psycopg2-binary>=2.9.0",
 ]
 
 # uv workspace 根配置。
