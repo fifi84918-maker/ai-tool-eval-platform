@@ -1,0 +1,17 @@
+{
+  "private_repo": "https://github.com/fifi84918-maker/ai-skill.git",
+  "repo_ref": "main",
+  "sync_command": "scripts/sync_benchmarks.py",
+  "sync_requires_env": "GITHUB_TOKEN_BENCHMARKS",
+  "cases": [
+    {
+      "case_id": "bench-doc-skill-001",
+      "skill_id": "219c93e5365609e6060c9afe1d88571324b4fff1a518f16f75353b0cab159733",
+      "file": "samples/doc_skill_case.py",
+      "sha256": "TODO_AFTER_SYNC",
+      "assertion_count": 3,
+      "scoring_weights_sha256": "TODO_AFTER_SYNC"
+    }
+  ],
+  "note": "This manifest contains only pointers and hashes. No assertion bodies, expected outputs, or scoring weights are stored in this public repo. The private repo is https://github.com/fifi84918-maker/ai-skill (Private)."
+}
