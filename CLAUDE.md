@@ -58,6 +58,15 @@ ai-tool-eval-platform/
 
 ## 评分引擎 API
 
+**Phase 1 静态评估：四维评分**
+
+当前实现基于静态代码扫描的 4 个维度：
+
+1. **Accuracy**（准确性，30%）：文档质量、测试覆盖
+2. **Reliability**（可靠性，30%）：依赖管理、代码规范
+3. **Security**（安全性，20%）：密钥扫描、安全策略
+4. **Performance**（性能，20%）：容器化、异步模式
+
 ```python
 from scoring import score_skill
 
@@ -69,6 +78,8 @@ result = score_skill(
 ```
 
 **等级阈值：** A(≥90) / B(≥75) / C(≥60) / D(≥40) / U(<40)
+
+**注：** PRD 中的"八维评分"（task_effect/stability/trigger_quality 等）是未来 Phase 2 动态运行时评估的目标，需要沙箱环境支持。当前 Phase 1 专注于静态代码质量的四维评分。
 
 ## 严格约束（所有 Task 必须遵守）
 
