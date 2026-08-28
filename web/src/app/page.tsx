@@ -181,6 +181,12 @@ export default function HomePage() {
               评估新仓库 →
             </Link>
             <Link
+              href="/bundles"
+              className="text-sm text-[#165DFF] hover:text-[#4080FF] font-medium"
+            >
+              Bundle 推荐 →
+            </Link>
+            <Link
               href="/categories"
               className="text-sm text-[#165DFF] hover:text-[#4080FF] font-medium"
             >
