@@ -44,13 +44,15 @@ class SkillRepository:
         query: Optional[str] = None,
         limit: int = 20,
         offset: int = 0,
+        sort_by: str = "score",
     ) -> tuple[list[dict], int]:
-        """List skills with optional query filter and pagination.
+        """List skills with optional query filter, pagination, and sorting.
         
         Args:
             query: Optional search query (matches canonical_name or description)
             limit: Max results to return
             offset: Number of results to skip
+            sort_by: Sort order - "score" (score_total desc) or "recent" (updated_at desc)
             
         Returns:
             Tuple of (skill list, total count)
@@ -66,6 +68,13 @@ class SkillRepository:
                     Skill.description.ilike(search_pattern),
                 )
             )
+        
+        # Apply sorting
+        if sort_by == "recent":
+            q = q.order_by(Skill.updated_at.desc())
+        else:  # default to "score"
+            # Sort by score_total descending, with nulls last
+            q = q.order_by(Skill.score_total.desc().nullslast())
         
         # Get total count before pagination
         total = q.count()
