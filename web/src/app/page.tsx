@@ -37,7 +37,15 @@ export default function HomePage() {
   return (
     <div className="space-y-6">
       <div className="bg-white p-6 rounded-lg shadow">
-        <h1 className="text-2xl font-bold mb-4">Search Skills</h1>
+        <div className="flex items-center justify-between mb-4">
+          <h1 className="text-2xl font-bold">Search Skills</h1>
+          <Link
+            href="/eval"
+            className="px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 text-sm font-medium"
+          >
+            Evaluate New Repo
+          </Link>
+        </div>
         <div className="flex gap-2">
           <input
             type="text"
