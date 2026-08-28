@@ -80,3 +80,29 @@ class ArtifactReference(Base):
 
     def __repr__(self) -> str:
         return f"<ArtifactReference(skill_id={self.skill_id!r}, key={self.key!r})>"
+
+
+class Evaluation(Base):
+    """Evaluation 记录表：存储评估历史。
+    
+    用于记录通过 /eval 或 /eval/upload 评估的结果，支持历史查询和对比功能。
+    """
+    __tablename__ = "evaluations"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    repo_url: Mapped[str] = mapped_column(String(512), nullable=False, index=True)
+    
+    # Score results
+    score_total: Mapped[float] = mapped_column(Float, nullable=False)
+    grade: Mapped[str] = mapped_column(String(2), nullable=False)
+    
+    # Detailed metrics and findings (JSON)
+    metrics: Mapped[dict] = mapped_column(JSON, nullable=False)  # {"accuracy": 85.0, ...}
+    findings: Mapped[Optional[dict]] = mapped_column(JSON, nullable=True)  # [{"dimension": "security", ...}]
+    meta: Mapped[Optional[dict]] = mapped_column(JSON, nullable=True)  # {"file_count": 150, "language": "Python", ...}
+    
+    # Timestamp
+    scanned_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, default=datetime.utcnow, index=True)
+
+    def __repr__(self) -> str:
+        return f"<Evaluation(id={self.id}, repo_url={self.repo_url!r}, grade={self.grade!r})>"

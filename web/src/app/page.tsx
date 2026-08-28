@@ -16,14 +16,24 @@ interface SkillSummary {
   grade?: string | null
 }
 
+interface HistoryItem {
+  id: number
+  repo_url: string
+  score_total: number
+  grade: string
+  scanned_at: string
+}
+
 export default function HomePage() {
   const [query, setQuery] = useState('')
   const [skills, setSkills] = useState<SkillSummary[]>([])
+  const [history, setHistory] = useState<HistoryItem[]>([])
   const [loading, setLoading] = useState(false)
 
-  // 页面加载时自动获取所有技能
+  // 页面加载时自动获取所有技能和历史记录
   useEffect(() => {
     loadSkills()
+    loadHistory()
   }, [])
 
   const loadSkills = async (searchQuery: string = '') => {
@@ -37,6 +47,16 @@ export default function HomePage() {
       console.error('加载失败:', error)
     } finally {
       setLoading(false)
+    }
+  }
+
+  const loadHistory = async () => {
+    try {
+      const response = await fetch('/api/v1/eval/history?limit=6')
+      const data = await response.json()
+      setHistory(data.results || [])
+    } catch (error) {
+      console.error('加载历史失败:', error)
     }
   }
 
@@ -129,6 +149,53 @@ export default function HomePage() {
           ))}
         </div>
       </div>
+
+      {/* History Section */}
+      {history.length > 0 && (
+        <div>
+          <div className="flex items-center justify-between mb-6">
+            <h2 className="text-2xl font-bold text-[#1D2129]">
+              历史记录 ({history.length})
+            </h2>
+            <Link 
+              href="/eval" 
+              className="text-[#165DFF] hover:text-[#4080FF] text-sm font-medium"
+            >
+              查看全部 →
+            </Link>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            {history.map((item) => (
+              <Link
+                key={item.id}
+                href={`/eval/compare?ids=${item.id}`}
+                className="block bg-white rounded-xl border border-[#E5E6EB] p-4 hover:shadow-md hover:border-[#165DFF] transition-all"
+              >
+                <div className="flex items-center justify-between mb-2">
+                  <div className="flex-1 min-w-0 mr-3">
+                    <p className="text-sm font-medium text-[#1D2129] truncate">
+                      {item.repo_url.replace('https://github.com/', '').replace('uploaded:', '上传: ')}
+                    </p>
+                  </div>
+                  <GradeBadge grade={item.grade} />
+                </div>
+                
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-2xl font-bold text-[#165DFF]">
+                      {item.score_total.toFixed(1)}
+                    </p>
+                  </div>
+                  <div className="text-xs text-[#86909C]">
+                    {new Date(item.scanned_at).toLocaleDateString('zh-CN')}
+                  </div>
+                </div>
+              </Link>
+            ))}
+          </div>
+        </div>
+      )}
     </div>
   )
 }

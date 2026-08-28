@@ -12,12 +12,24 @@ from datetime import datetime
 from pathlib import Path
 from typing import List, Optional
 
-from fastapi import APIRouter, HTTPException, Query, UploadFile, File
+from fastapi import APIRouter, HTTPException, Query, UploadFile, File, Depends
 from fastapi.responses import PlainTextResponse
 from pydantic import BaseModel
+from sqlalchemy.orm import Session
 
 from analyzer.static_scan import scan_repository
 from scoring import score_skill
+from db import SessionLocal
+from db.models import Evaluation
+
+
+def get_db():
+    """Dependency for database session."""
+    db = SessionLocal()
+    try:
+        yield db
+    finally:
+        db.close()
 
 
 router = APIRouter()
@@ -109,11 +121,12 @@ def _clone_and_scan(repo_url: str) -> dict:
 
 
 @router.post("", response_model=EvalResponse)
-def evaluate_repo_url(request: EvalRequest):
+def evaluate_repo_url(request: EvalRequest, db: Session = Depends(get_db)):
     """Clone GitHub repo, scan, and return score.
     
     Args:
         request: Contains repo_url (GitHub URL)
+        db: Database session
         
     Returns:
         Score result with metrics breakdown, findings, and metadata
@@ -123,6 +136,19 @@ def evaluate_repo_url(request: EvalRequest):
     # Check if error occurred
     if "error" in result:
         raise HTTPException(status_code=400, detail=result["error"])
+    
+    # Save to database
+    evaluation = Evaluation(
+        repo_url=result["repo_url"],
+        score_total=result["score_total"],
+        grade=result["grade"],
+        metrics=result["metrics"],
+        findings=result.get("findings", []),
+        meta=result.get("meta", {}),
+        scanned_at=datetime.fromisoformat(result["scanned_at"].replace("Z", "+00:00"))
+    )
+    db.add(evaluation)
+    db.commit()
     
     return result
 
@@ -254,11 +280,12 @@ async def get_evaluation_report(
 
 
 @router.post("/upload", response_model=EvalResponse)
-async def evaluate_zip_upload(file: UploadFile = File(...)):
+async def evaluate_zip_upload(file: UploadFile = File(...), db: Session = Depends(get_db)):
     """Evaluate uploaded ZIP file.
     
     Args:
         file: Uploaded ZIP file (max 50MB)
+        db: Database session
         
     Returns:
         Score result with metrics breakdown, findings, and metadata
@@ -309,8 +336,8 @@ async def evaluate_zip_upload(file: UploadFile = File(...)):
         # Score with engine
         score_result = score_skill(scan_result["metrics"])
         
-        # Build response
-        return EvalResponse(
+        # Build result
+        result = EvalResponse(
             repo_url=f"uploaded:{file.filename}",
             metrics=scan_result["metrics"],
             score_total=score_result["total"],
@@ -321,7 +348,109 @@ async def evaluate_zip_upload(file: UploadFile = File(...)):
             meta=scan_result["meta"],
         )
         
+        # Save to database
+        evaluation = Evaluation(
+            repo_url=result.repo_url,
+            score_total=result.score_total,
+            grade=result.grade,
+            metrics=result.metrics,
+            findings=result.findings,
+            meta=result.meta,
+            scanned_at=datetime.fromisoformat(result.scanned_at.replace("Z", "+00:00"))
+        )
+        db.add(evaluation)
+        db.commit()
+        
+        return result
+        
     finally:
         # Cleanup
         if tmpdir and os.path.exists(tmpdir):
             shutil.rmtree(tmpdir, ignore_errors=True)
+
+
+@router.get("/history")
+def get_evaluation_history(
+    limit: int = Query(10, ge=1, le=100),
+    offset: int = Query(0, ge=0),
+    db: Session = Depends(get_db)
+):
+    """Get evaluation history with pagination.
+    
+    Args:
+        limit: Maximum number of results (1-100)
+        offset: Offset for pagination
+        db: Database session
+        
+    Returns:
+        Paginated list of evaluations
+    """
+    # Query total count
+    total = db.query(Evaluation).count()
+    
+    # Query evaluations ordered by scanned_at descending
+    evaluations = db.query(Evaluation).order_by(
+        Evaluation.scanned_at.desc()
+    ).limit(limit).offset(offset).all()
+    
+    # Build response
+    results = []
+    for eval in evaluations:
+        results.append({
+            "id": eval.id,
+            "repo_url": eval.repo_url,
+            "score_total": eval.score_total,
+            "grade": eval.grade,
+            "scanned_at": eval.scanned_at.isoformat() + "Z"
+        })
+    
+    return {
+        "results": results,
+        "total": total,
+        "limit": limit,
+        "offset": offset
+    }
+
+
+@router.get("/compare")
+def compare_evaluations(
+    ids: str = Query(..., description="Comma-separated evaluation IDs (max 3)"),
+    db: Session = Depends(get_db)
+):
+    """Compare multiple evaluations side by side.
+    
+    Args:
+        ids: Comma-separated evaluation IDs (e.g., "1,2,3")
+        db: Database session
+        
+    Returns:
+        List of full evaluation records
+    """
+    # Parse IDs
+    try:
+        id_list = [int(id.strip()) for id in ids.split(",")]
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Invalid ID format")
+    
+    # Limit to 3
+    if len(id_list) > 3:
+        raise HTTPException(status_code=400, detail="Maximum 3 evaluations can be compared")
+    
+    # Query evaluations
+    evaluations = db.query(Evaluation).filter(Evaluation.id.in_(id_list)).all()
+    
+    # Build response
+    results = []
+    for eval in evaluations:
+        results.append({
+            "id": eval.id,
+            "repo_url": eval.repo_url,
+            "score_total": eval.score_total,
+            "grade": eval.grade,
+            "metrics": eval.metrics,
+            "findings": eval.findings or [],
+            "meta": eval.meta or {},
+            "scanned_at": eval.scanned_at.isoformat() + "Z"
+        })
+    
+    return {"results": results}
