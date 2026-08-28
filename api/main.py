@@ -1,7 +1,7 @@
 """FastAPI application entry point."""
 
 from fastapi import FastAPI
-from api.routers import skills, eval, bundles, ingest, profiles
+from api.routers import skills, eval, bundles, ingest, profiles, recommend
 
 app = FastAPI(
     title="AI Skill Benchmark Platform",
@@ -15,6 +15,7 @@ app.include_router(eval.router, prefix="/api/v1/eval", tags=["evaluation"])
 app.include_router(bundles.router)
 app.include_router(ingest.router)
 app.include_router(profiles.router)
+app.include_router(recommend.router)
 
 
 @app.get("/")

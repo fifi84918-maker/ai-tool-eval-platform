@@ -83,15 +83,22 @@ def search_skills(
     return SkillListResponse(items=items, total=total)
 
 
-@router.get("/{skill_id}", response_model=SkillDetailOut, responses={404: {"model": ErrorOut}})
-def get_skill_detail(
-    skill_id: str,
-    index: InMemorySkillIndex = Depends(get_index),
-):
-    """Get skill detail with JSON-LD card."""
+def get_skill_by_id(skill_id: str, index: InMemorySkillIndex | None = None) -> dict | None:
+    """Get skill detail by ID (reusable helper for other routers).
+    
+    Args:
+        skill_id: Skill identifier
+        index: Optional skill index, creates new if None
+        
+    Returns:
+        Scrubbed skill detail dict or None if not found
+    """
+    if index is None:
+        index = get_index()
+    
     detail = index.get(skill_id)
     if detail is None:
-        raise HTTPException(status_code=404, detail=f"Skill not found: {skill_id}")
+        return None
     
     # Generate JSON-LD card
     json_ld = None
@@ -128,3 +135,15 @@ def get_skill_detail(
         "json_ld": json_ld,
         **extended_fields,
     }
+
+
+@router.get("/{skill_id}", response_model=SkillDetailOut, responses={404: {"model": ErrorOut}})
+def get_skill_detail(
+    skill_id: str,
+    index: InMemorySkillIndex = Depends(get_index),
+):
+    """Get skill detail with JSON-LD card."""
+    detail = get_skill_by_id(skill_id, index)
+    if detail is None:
+        raise HTTPException(status_code=404, detail=f"Skill not found: {skill_id}")
+    return detail

@@ -129,3 +129,34 @@ class BundleRecommendRequest(BaseModel):
     team_size: int | None = None
     security_requirement: str = "standard"
     description: str = ""
+
+
+# V1A Task 29.4.6: Recommendation generation schemas
+class RecommendedSkillOut(BaseModel):
+    """推荐结果中的 Skill 详情。"""
+    skill_id: str
+    name: str
+    grade: str | None = None
+    score_total: float | None = None
+    metrics: dict[str, float] = {}   # accuracy/reliability/security/performance
+
+
+class BundleRecommendationOut(BaseModel):
+    """推荐结果中的 Bundle（含展开的 skills）。"""
+    bundle_id: str
+    name: str
+    tier: str
+    description: str = ""
+    security_level: str = "standard"
+    highlights: list[str] = []
+    score: float = 0.0          # 匹配得分
+    match_reasons: list[str] = []  # 可读的匹配理由
+    skills: list[RecommendedSkillOut] = []  # 展开详情
+
+
+class RecommendationResponse(BaseModel):
+    """推荐响应。"""
+    profile_id: str | None = None
+    profile_name: str | None = None
+    total: int
+    items: list[BundleRecommendationOut]
