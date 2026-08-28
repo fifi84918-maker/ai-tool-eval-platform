@@ -84,3 +84,28 @@ class ErrorOut(BaseModel):
     """标准错误响应。"""
     error: str
     message: str
+
+
+# V1A Task 29.4.4: Project Profile Models
+class ProjectProfileBase(BaseModel):
+    """项目画像基础模型。"""
+    name: str                    # 项目名称
+    languages: list[str] = []    # 语言栈 ["python","typescript","go"]
+    frameworks: list[str] = []   # 框架 ["fastapi","react","django"]
+    domains: list[str] = []      # 领域 ["web","cli","data","ml","devops"]
+    team_size: int | None = None # 团队规模
+    security_requirement: str = "standard"  # lax / standard / strict
+    description: str = ""        # 项目描述
+
+
+class ProjectProfileCreate(ProjectProfileBase):
+    """创建项目画像请求。"""
+    pass
+
+
+class ProjectProfileOut(ProjectProfileBase):
+    """项目画像响应。"""
+    id: str                      # UUID hex
+    created_at: str
+
+    model_config = {"from_attributes": True}
