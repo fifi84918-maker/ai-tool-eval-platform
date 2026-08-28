@@ -1,4 +1,4 @@
-"""Recommendation generation API endpoints (V1A Task 29.4.6/29.4.7)."""
+"""Recommendation generation API endpoints (V1A Task 29.4.6/29.4.7/29.2.2)."""
 
 from datetime import datetime, timezone
 from fastapi import APIRouter, HTTPException
@@ -15,6 +15,7 @@ from api.schemas import (
 from api.routers.bundles import _tiered_bundles
 from api.routers.profiles import _profiles
 from api.routers.skills import get_skill_by_id
+from api.rules import RuleEngine, BUILTIN_RULES
 
 router = APIRouter(prefix="/api/v1/recommend", tags=["recommendation"])
 
@@ -47,38 +48,29 @@ def generate_recommendations(
     """
     all_bundles = list(_tiered_bundles.values())
     
-    # Step 1: Filter by security level
-    security_req = profile.security_requirement.lower()
-    if security_req == "strict":
-        candidates = [b for b in all_bundles if b.tier == "enterprise"]
-    elif security_req == "standard":
-        candidates = [b for b in all_bundles if b.tier in ("enterprise", "standard")]
-    else:  # lax
-        candidates = all_bundles
+    # V1A 29.2.2: Use rule engine instead of hardcoded logic
+    engine = RuleEngine(BUILTIN_RULES)
     
-    # Step 2 & 3: Score and generate match reasons
     scored_bundles = []
-    for bundle in candidates:
-        # Calculate score
-        domain_overlap = set(profile.domains) & set(bundle.target_domains)
-        language_overlap = set(profile.languages) & set(bundle.required_languages)
-        score = len(domain_overlap) * 10 + len(language_overlap) * 5
+    for bundle in all_bundles:
+        # Evaluate bundle with rule engine
+        rule_result = engine.evaluate(profile, bundle)
         
-        # Generate match reasons
+        # Skip filtered bundles
+        if rule_result.filtered:
+            continue
+        
+        # Calculate score (base 0 + rule adjustments)
+        score = rule_result.score_adjustment
+        
+        # Extract match reasons from info-level violations
         match_reasons = []
-        
-        # Security match
         match_reasons.append(f"满足 {profile.security_requirement} 安全要求")
+        for violation in rule_result.violations:
+            if violation.severity == "info":
+                match_reasons.append(violation.message)
         
-        # Domain matches
-        for domain in domain_overlap:
-            match_reasons.append(f"覆盖领域：{domain}")
-        
-        # Language matches
-        for lang in language_overlap:
-            match_reasons.append(f"匹配语言：{lang}")
-        
-        # Step 4: Expand skills
+        # Expand skills
         skills = []
         for skill_id in bundle.skill_ids:
             try:
@@ -108,15 +100,18 @@ def generate_recommendations(
                 # Skip skills that fail to load (e.g., during index initialization)
                 continue
         
-        scored_bundles.append((bundle, score, match_reasons, skills))
+        # Convert violations to dict for JSON serialization
+        rule_findings = [v.model_dump() for v in rule_result.violations]
+        
+        scored_bundles.append((bundle, score, match_reasons, skills, rule_findings))
     
-    # Step 5: Sort by score descending, then by tier priority (starter first)
+    # Sort by score descending, then by tier priority (starter first)
     tier_priority = {"starter": 1, "standard": 2, "enterprise": 3}
     scored_bundles.sort(
         key=lambda x: (-x[1], tier_priority.get(x[0].tier, 99))
     )
     
-    # Step 6: Build response
+    # Build response
     items = [
         BundleRecommendationOut(
             bundle_id=bundle.bundle_id,
@@ -128,8 +123,9 @@ def generate_recommendations(
             score=score,
             match_reasons=reasons,
             skills=skills,
+            rule_findings=findings,
         )
-        for bundle, score, reasons, skills in scored_bundles
+        for bundle, score, reasons, skills, findings in scored_bundles
     ]
     
     return RecommendationResponse(

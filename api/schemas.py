@@ -152,6 +152,7 @@ class BundleRecommendationOut(BaseModel):
     score: float = 0.0          # 匹配得分
     match_reasons: list[str] = []  # 可读的匹配理由
     skills: list[RecommendedSkillOut] = []  # 展开详情
+    rule_findings: list[dict] = []   # V1A 29.2.2: 规则违规记录
 
 
 class RecommendationResponse(BaseModel):
