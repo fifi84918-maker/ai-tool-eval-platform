@@ -1,37 +1,54 @@
-version: '3.8'
+version: '3.9'
 
 services:
   postgres:
     image: postgres:16-alpine
-    container_name: skilleval-postgres
+    container_name: skillbench_pg
     environment:
-      POSTGRES_USER: skilleval
-      POSTGRES_PASSWORD: skilleval_dev_pass
-      POSTGRES_DB: skilleval_db
+      POSTGRES_USER: ${POSTGRES_USER:-skillbench}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-dev_password_change_me}
+      POSTGRES_DB: ${POSTGRES_DB:-skillbench}
     ports:
       - "5432:5432"
     volumes:
-      - postgres_data:/var/lib/postgresql/data
+      - pg_data:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U skilleval"]
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER:-skillbench}"]
       interval: 5s
       timeout: 5s
       retries: 5
 
-  # MinIO for object storage (Phase 2)
-  # minio:
-  #   image: minio/minio:latest
-  #   container_name: skilleval-minio
-  #   command: server /data --console-address ":9001"
-  #   environment:
-  #     MINIO_ROOT_USER: minioadmin
-  #     MINIO_ROOT_PASSWORD: minioadmin
-  #   ports:
-  #     - "9000:9000"
-  #     - "9001:9001"
-  #   volumes:
-  #     - minio_data:/data
+  backend:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: skillbench_api
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgresql+psycopg://${POSTGRES_USER:-skillbench}:${POSTGRES_PASSWORD:-dev_password_change_me}@postgres:5432/${POSTGRES_DB:-skillbench}
+      PYTHONPATH: /app
+    ports:
+      - "8000:8000"
+    volumes:
+      - .:/app
+      - skillbench_data:/app/data
+    command: uvicorn api.main:app --host 0.0.0.0 --port 8000 --reload
+
+  frontend:
+    build:
+      context: ./web
+      dockerfile: Dockerfile
+    container_name: skillbench_web
+    depends_on:
+      - backend
+    environment:
+      NEXT_PUBLIC_API_BASE_URL: http://localhost:8000
+    ports:
+      - "3000:3000"
 
 volumes:
-  postgres_data:
-  # minio_data:
+  pg_data:
+  skillbench_data:
+
