@@ -41,6 +41,24 @@ class ArtifactRefOut(BaseModel):
     summary: str | None
 
 
+class BundleSummaryOut(BaseModel):
+    """Bundle 摘要：列表视图使用。"""
+    bundle_id: str
+    name: str
+    description: str
+    category: str
+
+
+class BundleOut(BaseModel):
+    """Bundle 完整信息：一组相关 skills 的组合。"""
+    bundle_id: str
+    name: str
+    description: str
+    category: str
+    skill_ids: list[str]
+    tags: list[str]
+
+
 class TrialReportOut(BaseModel):
     """Phase 0 试评报告的脱敏投影。"""
     trial_id: str

@@ -37,6 +37,24 @@ class ArtifactRefDTO(TypedDict):
     summary: str | None
 
 
+class BundleSummary(TypedDict):
+    """Bundle 摘要：列表视图使用。"""
+    bundle_id: str
+    name: str
+    description: str
+    category: str
+
+
+class Bundle(TypedDict):
+    """Bundle 完整信息：一组相关 skills 的组合。"""
+    bundle_id: str
+    name: str
+    description: str
+    category: str
+    skill_ids: tuple[str, ...]
+    tags: tuple[str, ...]
+
+
 class TrialReportSummary(TypedDict):
     """Phase 0 试评报告的脱敏投影。"""
     trial_id: str

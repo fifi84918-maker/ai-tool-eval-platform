@@ -6,7 +6,7 @@ TODO(真实数据源)：Phase 1 接 PostgreSQL 数据层后替换为 DB 索引�
 
 from dataclasses import dataclass, field
 
-from mcp_server.models import ArtifactRefDTO, SkillDetail, SkillSummary
+from mcp_server.models import ArtifactRefDTO, Bundle, BundleSummary, SkillDetail, SkillSummary
 from mcp_server.policy import clamp_evidence_grade, scrub
 from orchestrator.pipeline import run as run_pipeline
 from orchestrator.pipeline import SkillReviewPipeline
@@ -302,3 +302,89 @@ def get_index_with_fallback():
             RuntimeWarning,
         )
         return InMemorySkillIndex()
+
+
+# Bundle samples and index
+# Skill ID mapping (from InMemorySkillIndex):
+# - doc-skill: 219c93e5365609e6060c9afe1d88571324b4fff1a518f16f75353b0cab159733
+# - loose-repo: 0766e96cdeb4121ba7aeac64bcc1fe4a0ab46563a70805f0d2d0767b19eb8e31
+# - cleaner-skill: ebadf9efabceaa60a7a24e385ffed84b288ec017f62848b3485494beadfcbe96
+# - unknown-license: b52777c216938ecaaf75d14393419ebb21d752d6f3bd2954e33bbf7a42485d88
+# - leaky-skill: c2025e6a6d0d23aa57da5beb1fd95ceb65cc6c52e4caaca6ed0a213508ea7dd7
+BUNDLE_SAMPLES: tuple[Bundle, ...] = (
+    Bundle(
+        bundle_id="bundle-doc-productivity",
+        name="文档生产力套装",
+        description="自动化文档生成、格式化和协作工具集合",
+        category="documentation",
+        skill_ids=(
+            "219c93e5365609e6060c9afe1d88571324b4fff1a518f16f75353b0cab159733",  # doc-skill
+            "0766e96cdeb4121ba7aeac64bcc1fe4a0ab46563a70805f0d2d0767b19eb8e31",  # loose-repo
+        ),
+        tags=("documentation", "automation", "productivity"),
+    ),
+    Bundle(
+        bundle_id="bundle-security-audit",
+        name="安全审计套装",
+        description="代码安全检查、权限审计和敏感信息扫描工具",
+        category="security",
+        skill_ids=(
+            "ebadf9efabceaa60a7a24e385ffed84b288ec017f62848b3485494beadfcbe96",  # cleaner-skill
+            "c2025e6a6d0d23aa57da5beb1fd95ceb65cc6c52e4caaca6ed0a213508ea7dd7",  # leaky-skill
+        ),
+        tags=("security", "audit", "compliance"),
+    ),
+    Bundle(
+        bundle_id="bundle-fullstack-dev",
+        name="全栈开发套装",
+        description="覆盖前后端开发、测试和部署的完整工具链",
+        category="development",
+        skill_ids=(
+            "0766e96cdeb4121ba7aeac64bcc1fe4a0ab46563a70805f0d2d0767b19eb8e31",  # loose-repo
+            "b52777c216938ecaaf75d14393419ebb21d752d6f3bd2954e33bbf7a42485d88",  # unknown-license
+        ),
+        tags=("development", "fullstack", "devops"),
+    ),
+    Bundle(
+        bundle_id="bundle-productivity-power",
+        name="高效办公套装",
+        description="邮件处理、日程管理和自动化工作流工具",
+        category="productivity",
+        skill_ids=(
+            "ebadf9efabceaa60a7a24e385ffed84b288ec017f62848b3485494beadfcbe96",  # cleaner-skill
+        ),
+        tags=("productivity", "automation", "workflow"),
+    ),
+)
+
+
+class InMemoryBundleIndex:
+    """内存 Bundle 索引：提供 Bundle 查询能力。"""
+
+    def __init__(self, bundles: tuple[Bundle, ...] = BUNDLE_SAMPLES) -> None:
+        self._bundles: dict[str, Bundle] = {b["bundle_id"]: b for b in bundles}
+
+    def bundles(self) -> tuple[Bundle, ...]:
+        """返回所有 bundles。"""
+        return tuple(self._bundles.values())
+
+    def get_bundle(self, bundle_id: str) -> Bundle | None:
+        """根据 bundle_id 获取 Bundle。"""
+        return self._bundles.get(bundle_id)
+
+    def search_bundles(self, q: str, limit: int = 10) -> tuple[Bundle, ...]:
+        """按名称/描述模糊匹配搜索 bundles。"""
+        query = q.strip().lower()
+        if not query:
+            return self.bundles()[:limit]
+
+        matches = []
+        for bundle in self._bundles.values():
+            search_text = f"{bundle['name']} {bundle['description']}".lower()
+            if query in search_text:
+                matches.append(bundle)
+
+        return tuple(matches[:limit])
+
+    def __len__(self) -> int:
+        return len(self._bundles)
