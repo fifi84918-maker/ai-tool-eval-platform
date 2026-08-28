@@ -1,16 +1,21 @@
 """Evaluation API endpoints - clone repo and score."""
 
+import asyncio
+import json
 import os
-import re
 import shutil
 import subprocess
 import tempfile
+from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime
 from pathlib import Path
+from typing import List, Optional
 
-from fastapi import APIRouter, HTTPException
-from pydantic import BaseModel, HttpUrl
+from fastapi import APIRouter, HTTPException, Query
+from fastapi.responses import PlainTextResponse
+from pydantic import BaseModel
 
+from analyzer.static_scan import scan_repository
 from scoring import score_skill
 
 
@@ -21,6 +26,10 @@ class EvalRequest(BaseModel):
     repo_url: str
 
 
+class BatchEvalRequest(BaseModel):
+    repo_urls: List[str]
+
+
 class EvalResponse(BaseModel):
     repo_url: str
     metrics: dict
@@ -28,166 +37,216 @@ class EvalResponse(BaseModel):
     grade: str
     breakdown: dict
     scanned_at: str
+    findings: Optional[List[dict]] = None
+    meta: Optional[dict] = None
 
 
-def extract_metrics(repo_path: Path) -> dict:
-    """Extract heuristic metrics from cloned repo.
-    
-    Returns dict with accuracy, reliability, security, performance (0-100 each).
-    """
-    metrics = {
-        "accuracy": 0.0,
-        "reliability": 0.0,
-        "security": 0.0,
-        "performance": 0.0,
-    }
-    
-    # Accuracy: documentation + tests + CI
-    if (repo_path / "README.md").exists() or (repo_path / "SKILL.md").exists():
-        metrics["accuracy"] += 20
-    
-    # Check for test files
-    test_patterns = ["test_*.py", "*_test.py", "*.test.js", "*.test.ts", "test/*.py"]
-    has_tests = any(repo_path.rglob(pattern) for pattern in test_patterns)
-    if has_tests:
-        metrics["accuracy"] += 20
-    
-    # Check for CI
-    if (repo_path / ".github" / "workflows").exists():
-        workflows = list((repo_path / ".github" / "workflows").glob("*.yml"))
-        workflows += list((repo_path / ".github" / "workflows").glob("*.yaml"))
-        if workflows:
-            metrics["accuracy"] += 10
-    
-    # Baseline for having basic structure
-    metrics["accuracy"] += 50
-    
-    # Reliability: package management + lockfiles + .gitignore
-    if (repo_path / "package.json").exists() or (repo_path / "pyproject.toml").exists():
-        metrics["reliability"] += 30
-    
-    # Check for lock files
-    lock_files = ["package-lock.json", "pnpm-lock.yaml", "poetry.lock", "Pipfile.lock", "uv.lock"]
-    if any((repo_path / lf).exists() for lf in lock_files):
-        metrics["reliability"] += 20
-    
-    if (repo_path / ".gitignore").exists():
-        metrics["reliability"] += 10
-    
-    # Baseline
-    metrics["reliability"] += 40
-    
-    # Security: check for .env, hardcoded secrets, SECURITY.md
-    metrics["security"] = 100  # Start at max, deduct for issues
-    
-    if (repo_path / ".env").exists():
-        metrics["security"] -= 30
-    
-    # Simple pattern matching for hardcoded secrets
-    secret_patterns = [r'secret\s*=\s*["\']', r'password\s*=\s*["\']', 
-                       r'token\s*=\s*["\']', r'api_key\s*=\s*["\']']
-    
-    code_files = list(repo_path.rglob("*.py")) + list(repo_path.rglob("*.js")) + list(repo_path.rglob("*.ts"))
-    secret_count = 0
-    for file_path in code_files[:100]:  # Limit scan to first 100 files
-        try:
-            content = file_path.read_text(encoding="utf-8", errors="ignore")
-            for pattern in secret_patterns:
-                if re.search(pattern, content, re.IGNORECASE):
-                    secret_count += 1
-                    break
-        except Exception:
-            continue
-    
-    metrics["security"] -= min(secret_count * 20, 60)
-    
-    if (repo_path / "SECURITY.md").exists():
-        metrics["security"] += 20
-    
-    metrics["security"] = max(0, min(100, metrics["security"]))
-    
-    # Performance: Dockerfile + cache config + dependency count
-    if (repo_path / "Dockerfile").exists():
-        metrics["performance"] += 20
-    
-    # Check for cache configs
-    cache_files = [".dockerignore", ".npmrc", ".yarnrc", "pyproject.toml"]
-    if any((repo_path / cf).exists() for cf in cache_files):
-        metrics["performance"] += 15
-    
-    # Check dependency count
-    if (repo_path / "requirements.txt").exists():
-        try:
-            lines = (repo_path / "requirements.txt").read_text().strip().split("\n")
-            non_empty = [l for l in lines if l.strip() and not l.strip().startswith("#")]
-            if len(non_empty) < 20:
-                metrics["performance"] += 20
-            else:
-                metrics["performance"] += 10
-        except Exception:
-            metrics["performance"] += 10
-    
-    # Baseline
-    metrics["performance"] += 45
-    
-    return metrics
+class BatchEvalResponse(BaseModel):
+    results: List[dict]  # Each is either EvalResponse dict or {"repo_url": ..., "error": ...}
 
 
-@router.post("", response_model=EvalResponse)
-def evaluate_repo_url(request: EvalRequest):
-    """Clone GitHub repo, extract metrics, and return score.
+def _clone_and_scan(repo_url: str) -> dict:
+    """Clone repository and scan it. Returns result dict or error dict.
     
     Args:
-        request: Contains repo_url (GitHub URL)
+        repo_url: GitHub repository URL
         
     Returns:
-        Score result with metrics breakdown
+        Dictionary with evaluation results or error information
     """
-    repo_url = request.repo_url
-    
-    # Validate GitHub URL
-    if "github.com" not in repo_url.lower():
-        raise HTTPException(status_code=400, detail="Only GitHub URLs are supported")
-    
     tmpdir = None
     try:
+        # Validate GitHub URL
+        if "github.com" not in repo_url.lower():
+            return {"repo_url": repo_url, "error": "Only GitHub URLs are supported"}
+        
         # Create temporary directory
         tmpdir = tempfile.mkdtemp(prefix="eval_")
         tmpdir_path = Path(tmpdir)
         
         # Clone repository
         try:
-            result = subprocess.run(
+            subprocess.run(
                 ["git", "clone", "--depth=1", repo_url, tmpdir],
                 timeout=30,
                 capture_output=True,
                 check=True,
             )
         except subprocess.TimeoutExpired:
-            raise HTTPException(status_code=408, detail="Repository clone timed out")
+            return {"repo_url": repo_url, "error": "Repository clone timed out"}
         except subprocess.CalledProcessError as e:
             error_msg = e.stderr.decode("utf-8", errors="ignore") if e.stderr else "Clone failed"
-            raise HTTPException(status_code=400, detail=f"Failed to clone repository: {error_msg}")
+            return {"repo_url": repo_url, "error": f"Failed to clone: {error_msg[:100]}"}
         except FileNotFoundError:
-            raise HTTPException(status_code=500, detail="git command not found")
+            return {"repo_url": repo_url, "error": "git command not found"}
         
-        # Extract metrics
-        metrics = extract_metrics(tmpdir_path)
+        # Scan repository
+        scan_result = scan_repository(tmpdir)
         
         # Score with engine
-        score_result = score_skill(metrics)
+        score_result = score_skill(scan_result["metrics"])
         
         # Build response
-        return EvalResponse(
-            repo_url=repo_url,
-            metrics=metrics,
-            score_total=score_result["total"],
-            grade=score_result["grade"],
-            breakdown=score_result["breakdown"],
-            scanned_at=datetime.utcnow().isoformat() + "Z",
-        )
+        return {
+            "repo_url": repo_url,
+            "metrics": scan_result["metrics"],
+            "score_total": score_result["total"],
+            "grade": score_result["grade"],
+            "breakdown": score_result["breakdown"],
+            "scanned_at": datetime.utcnow().isoformat() + "Z",
+            "findings": scan_result["findings"],
+            "meta": scan_result["meta"],
+        }
+        
+    except Exception as e:
+        return {"repo_url": repo_url, "error": str(e)}
         
     finally:
         # Cleanup
         if tmpdir and os.path.exists(tmpdir):
             shutil.rmtree(tmpdir, ignore_errors=True)
+
+
+@router.post("", response_model=EvalResponse)
+def evaluate_repo_url(request: EvalRequest):
+    """Clone GitHub repo, scan, and return score.
+    
+    Args:
+        request: Contains repo_url (GitHub URL)
+        
+    Returns:
+        Score result with metrics breakdown, findings, and metadata
+    """
+    result = _clone_and_scan(request.repo_url)
+    
+    # Check if error occurred
+    if "error" in result:
+        raise HTTPException(status_code=400, detail=result["error"])
+    
+    return result
+
+
+@router.post("/batch", response_model=BatchEvalResponse)
+async def evaluate_batch(request: BatchEvalRequest):
+    """Evaluate multiple repositories in parallel.
+    
+    Args:
+        request: Contains repo_urls (list of GitHub URLs, max 10)
+        
+    Returns:
+        List of evaluation results (successful and failed)
+    """
+    if len(request.repo_urls) > 10:
+        raise HTTPException(status_code=400, detail="Maximum 10 repositories per batch")
+    
+    if not request.repo_urls:
+        raise HTTPException(status_code=400, detail="At least one repository URL required")
+    
+    # Process in parallel with thread pool
+    with ThreadPoolExecutor(max_workers=3) as executor:
+        loop = asyncio.get_event_loop()
+        futures = [
+            loop.run_in_executor(executor, _clone_and_scan, url)
+            for url in request.repo_urls
+        ]
+        results = await asyncio.gather(*futures)
+    
+    return BatchEvalResponse(results=results)
+
+
+@router.get("/report")
+async def get_evaluation_report(
+    repo_url: str = Query(..., description="GitHub repository URL"),
+    format: str = Query("json", description="Output format: json or markdown")
+):
+    """Generate evaluation report for a repository.
+    
+    Args:
+        repo_url: GitHub repository URL
+        format: Output format (json or markdown)
+        
+    Returns:
+        Evaluation report in requested format
+    """
+    if format not in ["json", "markdown"]:
+        raise HTTPException(status_code=400, detail="Format must be 'json' or 'markdown'")
+    
+    # Execute scan
+    result = _clone_and_scan(repo_url)
+    
+    # Check if error occurred
+    if "error" in result:
+        raise HTTPException(status_code=400, detail=result["error"])
+    
+    # Return JSON format
+    if format == "json":
+        return result
+    
+    # Generate markdown report
+    md_lines = [
+        f"# Evaluation Report: {repo_url}",
+        "",
+        f"**Scanned at:** {result['scanned_at']}",
+        "",
+        "## Overall Score",
+        "",
+        f"- **Grade:** {result['grade']}",
+        f"- **Total Score:** {result['score_total']:.1f}/100",
+        "",
+        "## Dimension Breakdown",
+        "",
+        "| Dimension | Score | Weighted Contribution |",
+        "|-----------|-------|----------------------|",
+    ]
+    
+    for dim, score in result["breakdown"].items():
+        dim_name = dim.capitalize()
+        md_lines.append(f"| {dim_name} | {result['metrics'][dim]:.1f} | {score:.1f} |")
+    
+    md_lines.extend([
+        "",
+        "## Repository Metadata",
+        "",
+        f"- **Total Files:** {result['meta']['file_count']}",
+        f"- **Primary Language:** {result['meta']['language'] or 'Unknown'}",
+        f"- **Has README:** {'Yes' if result['meta']['has_readme'] else 'No'}",
+        f"- **Has Tests:** {'Yes' if result['meta']['has_tests'] else 'No'}",
+        f"- **Has CI:** {'Yes' if result['meta']['has_ci'] else 'No'}",
+        f"- **Has Dockerfile:** {'Yes' if result['meta']['has_dockerfile'] else 'No'}",
+        f"- **Has License:** {'Yes' if result['meta']['has_license'] else 'No'}",
+        f"- **Has Security Policy:** {'Yes' if result['meta']['has_security_md'] else 'No'}",
+        "",
+    ])
+    
+    # Add findings if any
+    if result["findings"]:
+        md_lines.extend([
+            "## Security Findings",
+            "",
+        ])
+        
+        for finding in result["findings"]:
+            severity_emoji = {
+                "critical": "🔴",
+                "high": "🟠",
+                "medium": "🟡",
+                "low": "🟢",
+            }.get(finding["severity"], "ℹ️")
+            
+            md_lines.append(f"- {severity_emoji} **{finding['severity'].upper()}**: {finding['message']}")
+        
+        md_lines.append("")
+    else:
+        md_lines.extend([
+            "## Security Findings",
+            "",
+            "✅ No security issues detected.",
+            "",
+        ])
+    
+    md_lines.append("---")
+    md_lines.append(f"*Generated by AI Skill Eval Platform*")
+    
+    markdown_content = "\n".join(md_lines)
+    
+    return PlainTextResponse(content=markdown_content, media_type="text/markdown")
