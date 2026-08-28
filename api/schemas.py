@@ -58,6 +58,7 @@ class BundleSummaryOut(BaseModel):
     name: str
     description: str
     category: str
+    tier: str | None = None  # V1A 29.4.5: starter/standard/enterprise
 
 
 class BundleOut(BaseModel):
@@ -68,6 +69,13 @@ class BundleOut(BaseModel):
     category: str
     skill_ids: list[str]
     tags: list[str]
+    # V1A 29.4.5: Tiered bundle fields
+    tier: str | None = None                    # starter/standard/enterprise
+    target_domains: list[str] = []             # 适用领域
+    required_languages: list[str] = []         # 建议语言栈
+    security_level: str = "standard"           # lax/standard/strict
+    highlights: list[str] = []                 # 卖点/亮点
+    skill_count: int | None = None             # len(skill_ids)
 
 
 class TrialReportOut(BaseModel):
@@ -109,3 +117,15 @@ class ProjectProfileOut(ProjectProfileBase):
     created_at: str
 
     model_config = {"from_attributes": True}
+
+
+# V1A Task 29.4.5: Bundle recommendation input
+class BundleRecommendRequest(BaseModel):
+    """Bundle 推荐请求（使用项目画像）。"""
+    name: str                    # 项目名称
+    languages: list[str] = []    # 语言栈
+    frameworks: list[str] = []   # 框架
+    domains: list[str] = []      # 领域
+    team_size: int | None = None
+    security_requirement: str = "standard"
+    description: str = ""
