@@ -64,3 +64,35 @@ def get_bundle_detail(
         skill_ids=list(bundle["skill_ids"]),
         tags=list(bundle["tags"]),
     )
+
+
+@router.get("/by-skill/{skill_id}", response_model=BundleListResponse)
+def get_bundles_by_skill(
+    skill_id: str,
+    index: InMemoryBundleIndex = Depends(get_bundle_index),
+):
+    """Get all bundles containing the specified skill.
+    
+    Returns a list of bundle summaries. If no bundles contain this skill,
+    returns an empty list (not a 404).
+    """
+    all_bundles = index.bundles()
+    
+    # Filter bundles that contain this skill_id
+    matching_bundles = [
+        b for b in all_bundles
+        if skill_id in b["skill_ids"]
+    ]
+    
+    # Convert to summary format
+    items = [
+        BundleSummaryOut(
+            bundle_id=b["bundle_id"],
+            name=b["name"],
+            description=b["description"],
+            category=b["category"],
+        )
+        for b in matching_bundles
+    ]
+    
+    return BundleListResponse(items=items, total=len(items))

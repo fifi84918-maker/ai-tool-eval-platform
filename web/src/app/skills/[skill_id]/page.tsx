@@ -1,3 +1,6 @@
+'use client'
+
+import { useState, useEffect } from 'react'
 import Link from 'next/link'
 import GradeBadge from '@/components/skill/GradeBadge'
 import ScoreBar from '@/components/skill/ScoreBar'
@@ -33,31 +36,83 @@ interface SkillDetail {
   scanned_at?: string
 }
 
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:8000'
-
-async function getSkill(skillId: string): Promise<SkillDetail | null> {
-  try {
-    const response = await fetch(`${API_BASE_URL}/api/v1/skills/${skillId}`, {
-      cache: 'no-store',
-    })
-    
-    if (!response.ok) {
-      return null
-    }
-    
-    return response.json()
-  } catch (error) {
-    console.error('Failed to fetch skill:', error)
-    return null
-  }
+interface BundleSummary {
+  bundle_id: string
+  name: string
+  description: string
+  category: string
 }
 
-export default async function SkillDetailPage({
+interface BundleListResponse {
+  items: BundleSummary[]
+  total: number
+}
+
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:8000'
+
+export default function SkillDetailPage({
   params,
 }: {
   params: { skill_id: string }
 }) {
-  const skill = await getSkill(params.skill_id)
+  const [skill, setSkill] = useState<SkillDetail | null>(null)
+  const [bundles, setBundles] = useState<BundleSummary[]>([])
+  const [loading, setLoading] = useState(true)
+  const [bundlesLoading, setBundlesLoading] = useState(false)
+
+  useEffect(() => {
+    loadSkill()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [params.skill_id])
+
+  const loadSkill = async () => {
+    setLoading(true)
+    try {
+      const response = await fetch(`/api/v1/skills/${params.skill_id}`)
+      
+      if (!response.ok) {
+        setSkill(null)
+        setLoading(false)
+        return
+      }
+      
+      const data = await response.json()
+      setSkill(data)
+      
+      // Load bundles containing this skill
+      loadBundles(params.skill_id)
+    } catch (error) {
+      console.error('Failed to fetch skill:', error)
+      setSkill(null)
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const loadBundles = async (skillId: string) => {
+    setBundlesLoading(true)
+    try {
+      const response = await fetch(`/api/v1/bundles/by-skill/${skillId}`)
+      
+      if (response.ok) {
+        const data: BundleListResponse = await response.json()
+        setBundles(data.items || [])
+      }
+    } catch (error) {
+      console.error('Failed to fetch bundles:', error)
+    } finally {
+      setBundlesLoading(false)
+    }
+  }
+
+  if (loading) {
+    return (
+      <div className="bg-white rounded-2xl border border-[#E5E6EB] p-12 shadow-sm text-center">
+        <div className="inline-block animate-spin rounded-full h-12 w-12 border-4 border-[#165DFF] border-t-transparent"></div>
+        <p className="mt-4 text-[#4E5969]">加载中...</p>
+      </div>
+    )
+  }
 
   if (!skill) {
     return (
@@ -297,6 +352,67 @@ export default async function SkillDetailPage({
                 </li>
               ))}
             </ul>
+          </div>
+        )}
+      </div>
+
+      {/* Bundle Recommendations Section */}
+      <div className="bg-white rounded-2xl border border-[#E5E6EB] p-8 shadow-sm">
+        <h2 className="text-lg font-semibold text-[#1D2129] mb-4">
+          📦 包含在以下套装中
+        </h2>
+
+        {bundlesLoading && (
+          <div className="text-center py-6">
+            <div className="inline-block animate-spin rounded-full h-8 w-8 border-4 border-[#165DFF] border-t-transparent"></div>
+            <p className="mt-2 text-sm text-[#4E5969]">加载套装信息...</p>
+          </div>
+        )}
+
+        {!bundlesLoading && bundles.length === 0 && (
+          <p className="text-sm text-[#86909C] py-2">
+            暂无套装包含此技能
+          </p>
+        )}
+
+        {!bundlesLoading && bundles.length > 0 && (
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            {bundles.slice(0, 3).map((bundle) => (
+              <Link
+                key={bundle.bundle_id}
+                href={`/bundles/${bundle.bundle_id}`}
+                className="block p-5 border border-[#E5E6EB] rounded-xl hover:border-[#165DFF] hover:shadow-md transition-all"
+              >
+                <div className="flex items-start justify-between mb-2">
+                  <h3 className="text-base font-semibold text-[#1D2129] flex-1">
+                    {bundle.name}
+                  </h3>
+                  <span className="text-xl ml-2">📦</span>
+                </div>
+                <p className="text-sm text-[#4E5969] mb-3 line-clamp-1">
+                  {bundle.description}
+                </p>
+                <div className="flex items-center justify-between">
+                  <span className="text-xs px-2 py-1 rounded bg-[#165DFF]/10 text-[#165DFF] font-medium">
+                    {bundle.category}
+                  </span>
+                  <span className="text-sm text-[#165DFF] font-medium">
+                    查看详情 →
+                  </span>
+                </div>
+              </Link>
+            ))}
+          </div>
+        )}
+
+        {!bundlesLoading && bundles.length > 3 && (
+          <div className="mt-4 text-center">
+            <Link
+              href="/bundles"
+              className="text-sm text-[#165DFF] hover:text-[#4080FF] font-medium"
+            >
+              查看全部套装 →
+            </Link>
           </div>
         )}
       </div>

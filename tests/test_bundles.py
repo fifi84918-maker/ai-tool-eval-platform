@@ -170,3 +170,70 @@ def test_bundle_categories_match_existing():
         assert category in valid_categories, (
             f"Bundle {bundle['bundle_id']} uses invalid category: {category}"
         )
+
+
+def test_bundles_by_skill(client):
+    """Test GET /api/v1/bundles/by-skill/{skill_id} returns correct bundle list."""
+    # Use a skill that is in multiple bundles
+    # From BUNDLE_SAMPLES: doc-skill (219c93e5...) is in bundle-doc-productivity
+    skill_id = "219c93e5365609e6060c9afe1d88571324b4fff1a518f16f75353b0cab159733"
+    
+    response = client.get(f"/api/v1/bundles/by-skill/{skill_id}")
+    
+    assert response.status_code == 200
+    data = response.json()
+    
+    # Check response structure
+    assert "items" in data
+    assert "total" in data
+    assert isinstance(data["items"], list)
+    
+    # Should find at least one bundle
+    assert len(data["items"]) > 0
+    
+    # Verify the bundle contains this skill
+    bundle_ids = [item["bundle_id"] for item in data["items"]]
+    assert "bundle-doc-productivity" in bundle_ids
+    
+    # Check item structure (should be summary format, no skill_ids)
+    for item in data["items"]:
+        assert "bundle_id" in item
+        assert "name" in item
+        assert "description" in item
+        assert "category" in item
+        assert "skill_ids" not in item
+
+
+def test_bundles_by_skill_not_found(client):
+    """Test GET /api/v1/bundles/by-skill/{skill_id} returns empty list for non-existent skill."""
+    # Use a non-existent skill_id
+    skill_id = "nonexistent-skill-id-12345"
+    
+    response = client.get(f"/api/v1/bundles/by-skill/{skill_id}")
+    
+    # Should return 200 with empty list, not 404
+    assert response.status_code == 200
+    data = response.json()
+    
+    assert "items" in data
+    assert "total" in data
+    assert len(data["items"]) == 0
+    assert data["total"] == 0
+
+
+def test_bundles_by_skill_multiple_results(client):
+    """Test that a skill in multiple bundles returns all of them."""
+    # Use loose-repo (0766e96c...) which is in both bundle-doc-productivity and bundle-fullstack-dev
+    skill_id = "0766e96cdeb4121ba7aeac64bcc1fe4a0ab46563a70805f0d2d0767b19eb8e31"
+    
+    response = client.get(f"/api/v1/bundles/by-skill/{skill_id}")
+    
+    assert response.status_code == 200
+    data = response.json()
+    
+    # Should find multiple bundles
+    assert len(data["items"]) >= 2
+    
+    bundle_ids = [item["bundle_id"] for item in data["items"]]
+    assert "bundle-doc-productivity" in bundle_ids
+    assert "bundle-fullstack-dev" in bundle_ids
