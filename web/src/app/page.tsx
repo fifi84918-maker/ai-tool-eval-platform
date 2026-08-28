@@ -170,9 +170,23 @@ export default function HomePage() {
           <h1 className="text-4xl font-bold text-[#1D2129] mb-4">
             AI Skill 评测平台
           </h1>
-          <p className="text-lg text-[#4E5969] mb-8">
+          <p className="text-lg text-[#4E5969] mb-2">
             发现、评估并对比各平台的 AI Skills
           </p>
+          <div className="flex items-center justify-center gap-6 mb-8">
+            <Link
+              href="/eval"
+              className="text-sm text-[#165DFF] hover:text-[#4080FF] font-medium"
+            >
+              评估新仓库 →
+            </Link>
+            <Link
+              href="/scoring"
+              className="text-sm text-[#165DFF] hover:text-[#4080FF] font-medium"
+            >
+              了解评分体系 →
+            </Link>
+          </div>
           
           <div className="relative flex gap-3">
             <div className="relative flex-1">

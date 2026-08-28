@@ -118,7 +118,15 @@ export default async function SkillDetailPage({
         {/* Dimension Scores (if available) */}
         {skill.metrics && Object.keys(skill.metrics).length > 0 && (
           <div className="mb-8">
-            <h3 className="text-lg font-semibold text-[#1D2129] mb-4">维度评分</h3>
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-lg font-semibold text-[#1D2129]">维度评分</h3>
+              <Link
+                href="/scoring"
+                className="text-sm text-[#165DFF] hover:text-[#4080FF] font-medium"
+              >
+                了解评分体系 →
+              </Link>
+            </div>
             <div className="space-y-4">
               {skill.metrics.accuracy !== undefined && (
                 <div>
