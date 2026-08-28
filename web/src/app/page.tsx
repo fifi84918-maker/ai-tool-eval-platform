@@ -181,6 +181,12 @@ export default function HomePage() {
               评估新仓库 →
             </Link>
             <Link
+              href="/categories"
+              className="text-sm text-[#165DFF] hover:text-[#4080FF] font-medium"
+            >
+              按分类浏览 →
+            </Link>
+            <Link
               href="/scoring"
               className="text-sm text-[#165DFF] hover:text-[#4080FF] font-medium"
             >
