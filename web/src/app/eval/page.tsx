@@ -24,11 +24,20 @@ interface EvalResult {
   scanned_at: string
 }
 
+interface BatchResult {
+  repo_url: string
+  score_total?: number
+  grade?: string
+  error?: string
+}
+
 export default function EvaluateRepoPage() {
   const [repoUrl, setRepoUrl] = useState('')
   const [selectedFile, setSelectedFile] = useState<File | null>(null)
+  const [batchUrls, setBatchUrls] = useState('')
   const [loading, setLoading] = useState(false)
   const [result, setResult] = useState<EvalResult | null>(null)
+  const [batchResults, setBatchResults] = useState<BatchResult[]>([])
   const [error, setError] = useState<string | null>(null)
 
   const handleEvaluateUrl = async () => {
@@ -40,6 +49,7 @@ export default function EvaluateRepoPage() {
     setLoading(true)
     setError(null)
     setResult(null)
+    setBatchResults([])
 
     try {
       const response = await fetch('/api/v1/eval', {
@@ -78,6 +88,7 @@ export default function EvaluateRepoPage() {
     setLoading(true)
     setError(null)
     setResult(null)
+    setBatchResults([])
 
     try {
       const formData = new FormData()
@@ -95,6 +106,50 @@ export default function EvaluateRepoPage() {
 
       const data = await response.json()
       setResult(data)
+    } catch (err) {
+      setError(err instanceof Error ? err.message : '发生错误')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const handleBatchEvaluate = async () => {
+    const urls = batchUrls
+      .split('\n')
+      .map(line => line.trim())
+      .filter(line => line.length > 0)
+
+    if (urls.length === 0) {
+      setError('请输入至少一个仓库 URL')
+      return
+    }
+
+    if (urls.length > 10) {
+      setError('批量评估最多支持 10 个仓库')
+      return
+    }
+
+    setLoading(true)
+    setError(null)
+    setResult(null)
+    setBatchResults([])
+
+    try {
+      const response = await fetch('/api/v1/eval/batch', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ repo_urls: urls }),
+      })
+
+      if (!response.ok) {
+        const errorData = await response.json()
+        throw new Error(errorData.detail || '批量评估失败')
+      }
+
+      const data = await response.json()
+      setBatchResults(data.results || [])
     } catch (err) {
       setError(err instanceof Error ? err.message : '发生错误')
     } finally {
@@ -186,6 +241,42 @@ export default function EvaluateRepoPage() {
               className="px-8 py-3 bg-[#165DFF] text-white rounded-full hover:bg-[#4080FF] disabled:opacity-50 disabled:cursor-not-allowed font-medium transition-colors"
             >
               {loading ? '评估中...' : '开始评估'}
+            </button>
+          </div>
+        </div>
+
+        {/* 分隔线 */}
+        <div className="relative my-8">
+          <div className="absolute inset-0 flex items-center">
+            <div className="w-full border-t border-[#E5E6EB]"></div>
+          </div>
+          <div className="relative flex justify-center text-sm">
+            <span className="px-4 bg-white text-[#86909C]">或</span>
+          </div>
+        </div>
+
+        {/* 批量评估 */}
+        <div>
+          <h2 className="text-lg font-semibold text-[#1D2129] mb-4">批量评估</h2>
+          <p className="text-[#4E5969] mb-4">
+            输入多个 GitHub 仓库 URL，每行一个，最多 10 个。
+          </p>
+
+          <div className="space-y-3">
+            <textarea
+              value={batchUrls}
+              onChange={(e) => setBatchUrls(e.target.value)}
+              placeholder="https://github.com/owner/repo1&#10;https://github.com/owner/repo2&#10;https://github.com/owner/repo3"
+              rows={5}
+              className="w-full px-4 py-3 bg-white border border-[#E5E6EB] rounded-xl focus:outline-none focus:ring-2 focus:ring-[#165DFF] focus:border-[#165DFF] text-[#1D2129] font-mono text-sm"
+              disabled={loading}
+            />
+            <button
+              onClick={handleBatchEvaluate}
+              disabled={loading || !batchUrls.trim()}
+              className="w-full py-3 bg-[#165DFF] text-white rounded-xl hover:bg-[#4080FF] disabled:opacity-50 disabled:cursor-not-allowed font-medium transition-colors"
+            >
+              {loading ? '批量评估中...' : '开始批量评估'}
             </button>
           </div>
         </div>
@@ -295,6 +386,57 @@ export default function EvaluateRepoPage() {
           <div className="mt-8 pt-6 border-t border-[#E5E6EB]">
             <p className="text-xs text-[#86909C]">
               扫描时间: {new Date(result.scanned_at).toLocaleString('zh-CN')}
+            </p>
+          </div>
+        </div>
+      )}
+
+      {batchResults.length > 0 && (
+        <div className="bg-white rounded-2xl border border-[#E5E6EB] p-8 shadow-sm">
+          <h2 className="text-2xl font-bold text-[#1D2129] mb-6">
+            批量评估结果 ({batchResults.length})
+          </h2>
+
+          <div className="space-y-4">
+            {batchResults.map((item, index) => (
+              <div
+                key={index}
+                className="p-4 border border-[#E5E6EB] rounded-xl hover:border-[#165DFF] transition-colors"
+              >
+                <div className="flex items-center justify-between">
+                  <div className="flex-1 min-w-0 mr-4">
+                    <p className="text-sm font-medium text-[#1D2129] truncate mb-1">
+                      {item.repo_url.replace('https://github.com/', '')}
+                    </p>
+                    {item.error ? (
+                      <p className="text-sm text-[#F53F3F]">❌ {item.error}</p>
+                    ) : (
+                      <div className="flex items-center gap-3">
+                        <span className="text-2xl font-bold text-[#165DFF]">
+                          {item.score_total?.toFixed(1)}
+                        </span>
+                        {item.grade && <GradeBadge grade={item.grade} />}
+                      </div>
+                    )}
+                  </div>
+                  {!item.error && (
+                    <Link
+                      href={item.repo_url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-[#165DFF] hover:text-[#4080FF] text-sm whitespace-nowrap"
+                    >
+                      查看仓库 →
+                    </Link>
+                  )}
+                </div>
+              </div>
+            ))}
+          </div>
+
+          <div className="mt-6 p-4 bg-[#F5F7FA] rounded-xl">
+            <p className="text-sm text-[#4E5969]">
+              💡 提示：批量评估结果不会自动保存到历史记录，请单独评估重要仓库。
             </p>
           </div>
         </div>
