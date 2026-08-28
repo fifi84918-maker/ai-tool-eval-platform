@@ -1,14 +1,10 @@
 'use client'
 
+import { Suspense } from 'react'
 import { useState, useEffect } from 'react'
 import { useSearchParams } from 'next/navigation'
 import Link from 'next/link'
 import GradeBadge from '@/components/skill/GradeBadge'
-
-// Tell Next.js this is a dynamic page
-export const dynamic = 'force-dynamic'
-export const fetchCache = 'force-no-store'
-export const revalidate = 0
 
 interface EvaluationDetail {
   id: number
@@ -225,5 +221,13 @@ function CompareContent() {
 }
 
 export default function ComparePage() {
-  return <CompareContent />
+  return (
+    <Suspense fallback={
+      <div className="flex items-center justify-center min-h-screen">
+        <div className="text-[#4E5969]">加载中...</div>
+      </div>
+    }>
+      <CompareContent />
+    </Suspense>
+  )
 }
