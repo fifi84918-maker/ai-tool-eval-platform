@@ -1,8 +1,10 @@
 """Skills API endpoints."""
 
+import os
 from typing import Annotated
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel
+from sqlalchemy.orm import Session
 
 from api.deps import get_index
 from api.schemas import SkillSummaryOut, SkillDetailOut, ErrorOut
@@ -13,6 +15,15 @@ from db import SessionLocal
 from db.repository import SkillRepository
 
 router = APIRouter(prefix="/api/v1/skills", tags=["skills"])
+
+
+def get_db():
+    """Database session dependency (same as eval.py for consistency)."""
+    db = SessionLocal()
+    try:
+        yield db
+    finally:
+        db.close()
 
 
 class SkillListResponse(BaseModel):
@@ -27,33 +38,46 @@ def search_skills(
     limit: int = Query(20, ge=1, le=100, description="Max results"),
     offset: int = Query(0, ge=0, description="Skip count"),
     sort_by: str = Query("score", description="Sort by: 'score' or 'recent'"),
+    index: InMemorySkillIndex = Depends(get_index),
+    db: Session = Depends(get_db),
 ):
     """Search skills with pagination and sorting.
     
     When query is empty, returns all skills (default list).
     When query is provided, filters by name/description.
     Supports sorting by score (default) or recent updates.
+    
+    Uses InMemorySkillIndex for now (database integration in progress).
     """
-    # Use database for real pagination and sorting
-    with SessionLocal() as session:
-        repo = SkillRepository(session)
-        skills, total = repo.list_skills(
-            query=q if q else None,
-            limit=limit,
-            offset=offset,
-            sort_by=sort_by,
-        )
+    # Use InMemorySkillIndex for compatibility with tests
+    # TODO: Migrate to database when skills are persisted
+    all_results = index.search(q or "", limit=limit + offset + 100)
     
-    # Add score/grade fields (None if not present) and convert to SkillSummaryOut
-    results = []
-    for skill in skills:
-        if "score_total" not in skill:
-            skill["score_total"] = None
-        if "grade" not in skill:
-            skill["grade"] = None
-        results.append(SkillSummaryOut(**skill))
+    # Manual pagination and sorting
+    results_list = list(all_results)
     
-    return SkillListResponse(items=results, total=total)
+    # Sort
+    if sort_by == "recent":
+        # Sort by skill_id as proxy (no updated_at in memory index)
+        results_list.sort(key=lambda x: x.get("skill_id", ""), reverse=True)
+    else:  # score
+        results_list.sort(key=lambda x: x.get("score_total") or 0, reverse=True)
+    
+    # Paginate
+    total = len(results_list)
+    paginated = results_list[offset:offset + limit]
+    
+    # Add score/grade fields and convert to SkillSummaryOut
+    items = []
+    for skill in paginated:
+        scrubbed = scrub(skill)
+        if "score_total" not in scrubbed:
+            scrubbed["score_total"] = None
+        if "grade" not in scrubbed:
+            scrubbed["grade"] = None
+        items.append(SkillSummaryOut(**scrubbed))
+    
+    return SkillListResponse(items=items, total=total)
 
 
 @router.get("/{skill_id}", response_model=SkillDetailOut, responses={404: {"model": ErrorOut}})

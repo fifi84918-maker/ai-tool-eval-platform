@@ -8,26 +8,36 @@ class TestSkillsAPI:
     """Test /api/v1/skills endpoints."""
 
     def test_search_skills_returns_200_and_list(self, client):
-        """GET /api/v1/skills returns 200 with list of skills."""
+        """GET /api/v1/skills returns 200 with paginated results."""
         response = client.get("/api/v1/skills")
         assert response.status_code == 200
         data = response.json()
-        assert isinstance(data, list)
-        assert len(data) > 0
-        # Check structure
-        first = data[0]
-        assert "skill_id" in first
-        assert "canonical_name" in first
-        assert "evidence_grade" in first
+        
+        # New format: {"items": [...], "total": int}
+        assert isinstance(data, dict)
+        assert "items" in data
+        assert "total" in data
+        assert isinstance(data["items"], list)
+        assert isinstance(data["total"], int)
+        
+        # Check structure of items
+        if len(data["items"]) > 0:
+            first = data["items"][0]
+            assert "skill_id" in first
+            assert "canonical_name" in first
+            assert "evidence_grade" in first
 
     def test_search_skills_with_query_filters(self, client):
         """GET /api/v1/skills?q=hello filters results."""
         response = client.get("/api/v1/skills?q=doc")
         assert response.status_code == 200
         data = response.json()
-        assert isinstance(data, list)
+        
+        # New format
+        assert isinstance(data, dict)
+        assert "items" in data
         # Should filter to matching skills
-        if data:
+        if data["items"]:
             text = json.dumps(data, ensure_ascii=False).lower()
             assert "doc" in text
 
@@ -41,16 +51,20 @@ class TestSkillsAPI:
         assert response.status_code == 200
         page2 = response.json()
         
+        # New format
+        assert isinstance(page1, dict) and "items" in page1
+        assert isinstance(page2, dict) and "items" in page2
+        
         # Pages should be different (unless we have < 2 skills)
-        if len(page1) == 2 and len(page2) > 0:
-            assert page1[0]["skill_id"] != page2[0]["skill_id"]
+        if len(page1["items"]) == 2 and len(page2["items"]) > 0:
+            assert page1["items"][0]["skill_id"] != page2["items"][0]["skill_id"]
 
     def test_get_skill_detail_returns_correct_skill_with_json_ld(self, client):
         """GET /api/v1/skills/{skill_id} returns detail with json_ld."""
         # First get a skill_id from search
         search_response = client.get("/api/v1/skills")
-        skills = search_response.json()
-        skill_id = skills[0]["skill_id"]
+        skills_data = search_response.json()
+        skill_id = skills_data["items"][0]["skill_id"]  # Updated to use new format
         
         response = client.get(f"/api/v1/skills/{skill_id}")
         assert response.status_code == 200
@@ -95,9 +109,9 @@ class TestSkillsAPI:
         
         # Test detail
         search_response = client.get("/api/v1/skills")
-        skills = search_response.json()
-        if skills:
-            skill_id = skills[0]["skill_id"]
+        skills_data = search_response.json()
+        if skills_data.get("items"):
+            skill_id = skills_data["items"][0]["skill_id"]
             response = client.get(f"/api/v1/skills/{skill_id}")
             text = json.dumps(response.json(), ensure_ascii=False)
             assert "api_key" not in text

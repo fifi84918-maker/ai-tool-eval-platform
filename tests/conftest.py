@@ -6,7 +6,8 @@ from sqlalchemy.pool import StaticPool
 
 from api.main import app
 from db import Base
-from api.routers.eval import get_db
+from api.routers.eval import get_db as eval_get_db
+from api.routers.skills import get_db as skills_get_db
 
 TEST_DB_URL = "sqlite:///:memory:"
 engine = create_engine(
@@ -33,7 +34,12 @@ def client(db_session):
             yield db_session
         finally:
             pass
-    app.dependency_overrides[get_db] = override_get_db
+    
+    # Override both eval and skills get_db
+    app.dependency_overrides[eval_get_db] = override_get_db
+    app.dependency_overrides[skills_get_db] = override_get_db
+    
     with TestClient(app) as c:
         yield c
+    
     app.dependency_overrides.clear()

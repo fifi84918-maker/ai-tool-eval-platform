@@ -84,9 +84,9 @@ class TestBenchmarkIsolation:
         assert "payload_hash" not in result_str
         
         # Test detail
-        skills = response.json()
-        if skills:
-            skill_id = skills[0]["skill_id"]
+        skills_data = response.json()
+        if skills_data.get("items"):
+            skill_id = skills_data["items"][0]["skill_id"]
             response = client.get(f"/api/v1/skills/{skill_id}")
             assert response.status_code == 200
             result_str = json.dumps(response.json(), ensure_ascii=False)
