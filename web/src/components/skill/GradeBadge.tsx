@@ -5,21 +5,21 @@ interface GradeBadgeProps {
 export default function GradeBadge({ grade }: GradeBadgeProps) {
   if (!grade) {
     return (
-      <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-semibold bg-gray-300 text-gray-600">
+      <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-semibold bg-gray-200 text-[#86909C]">
         —
       </span>
     )
   }
 
   const colorMap: Record<string, string> = {
-    A: 'bg-green-500 text-white',
-    B: 'bg-teal-500 text-white',
-    C: 'bg-yellow-500 text-black',
-    D: 'bg-orange-500 text-white',
-    U: 'bg-red-500 text-white',
+    A: 'bg-[#00B42A] text-white',
+    B: 'bg-[#165DFF] text-white',
+    C: 'bg-[#FF7D00] text-white',
+    D: 'bg-[#F53F3F] text-white',
+    U: 'bg-[#86909C] text-white',
   }
 
-  const colorClass = colorMap[grade.toUpperCase()] || 'bg-gray-300 text-gray-600'
+  const colorClass = colorMap[grade.toUpperCase()] || 'bg-gray-300 text-[#86909C]'
 
   return (
     <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-semibold ${colorClass}`}>

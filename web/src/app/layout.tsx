@@ -14,27 +14,27 @@ export default function RootLayout({
 }) {
   return (
     <html lang="en">
-      <body className="min-h-screen bg-gray-50">
-        <nav className="bg-white shadow-sm border-b">
+      <body className="min-h-screen bg-white">
+        <nav className="bg-white border-b border-[#E5E6EB]">
           <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
             <div className="flex justify-between h-16 items-center">
               <div className="flex items-center">
-                <Link href="/" className="text-xl font-bold text-gray-900">
-                  AI Skill Benchmark
+                <Link href="/" className="text-xl font-bold text-[#165DFF]">
+                  AI Skill Eval
                 </Link>
               </div>
-              <div className="flex space-x-4">
+              <div className="flex items-center space-x-4">
                 <Link 
                   href="/" 
-                  className="text-gray-700 hover:text-gray-900 px-3 py-2 rounded-md text-sm font-medium"
+                  className="text-[#1D2129] hover:text-[#165DFF] px-3 py-2 text-sm font-medium"
                 >
                   Search
                 </Link>
                 <Link 
-                  href="/admin" 
-                  className="text-gray-700 hover:text-gray-900 px-3 py-2 rounded-md text-sm font-medium"
+                  href="/eval" 
+                  className="bg-[#165DFF] hover:bg-[#4080FF] text-white px-4 py-2 rounded-full text-sm font-medium transition-colors"
                 >
-                  Admin
+                  Evaluate New Repo
                 </Link>
               </div>
             </div>

@@ -1,3 +1,30 @@
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
+:root {
+  --bg-page: #FFFFFF;
+  --bg-card: #F5F7FA;
+  --color-primary: #165DFF;
+  --color-primary-hover: #4080FF;
+  --color-primary-light: rgba(22, 93, 255, 0.08);
+  --text-primary: #1D2129;
+  --text-secondary: #4E5969;
+  --text-tertiary: #86909C;
+  --border-color: #E5E6EB;
+  --grade-a: #00B42A;
+  --grade-b: #165DFF;
+  --grade-c: #FF7D00;
+  --grade-d: #F53F3F;
+  --grade-u: #86909C;
+}
+
+body {
+  background: var(--bg-page);
+  color: var(--text-primary);
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen',
+    'Ubuntu', 'Cantarell', 'Fira Sans', 'Droid Sans', 'Helvetica Neue',
+    sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}

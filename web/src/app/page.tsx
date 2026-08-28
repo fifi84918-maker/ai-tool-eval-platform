@@ -35,87 +35,89 @@ export default function HomePage() {
   }
 
   return (
-    <div className="space-y-6">
-      <div className="bg-white p-6 rounded-lg shadow">
-        <div className="flex items-center justify-between mb-4">
-          <h1 className="text-2xl font-bold">Search Skills</h1>
-          <Link
-            href="/eval"
-            className="px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 text-sm font-medium"
-          >
-            Evaluate New Repo
-          </Link>
-        </div>
-        <div className="flex gap-2">
-          <input
-            type="text"
-            value={query}
-            onChange={(e) => setQuery(e.target.value)}
-            onKeyPress={(e) => e.key === 'Enter' && handleSearch()}
-            placeholder="Search by name or description..."
-            className="flex-1 px-4 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-          />
-          <button
-            onClick={handleSearch}
-            disabled={loading}
-            className="px-6 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:opacity-50"
-          >
-            {loading ? 'Searching...' : 'Search'}
-          </button>
+    <div className="space-y-8">
+      {/* Hero Section */}
+      <div className="bg-white rounded-2xl border border-[#E5E6EB] p-8 shadow-sm">
+        <div className="max-w-3xl mx-auto text-center">
+          <h1 className="text-4xl font-bold text-[#1D2129] mb-4">
+            AI Skill Benchmark Platform
+          </h1>
+          <p className="text-lg text-[#4E5969] mb-8">
+            Discover, evaluate, and compare AI skills across platforms
+          </p>
+          
+          <div className="flex gap-3">
+            <input
+              type="text"
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              onKeyPress={(e) => e.key === 'Enter' && handleSearch()}
+              placeholder="Search by name or description..."
+              className="flex-1 px-4 py-3 bg-white border border-[#E5E6EB] rounded-xl focus:outline-none focus:ring-2 focus:ring-[#165DFF] focus:border-[#165DFF] text-[#1D2129]"
+            />
+            <button
+              onClick={handleSearch}
+              disabled={loading}
+              className="px-8 py-3 bg-[#165DFF] text-white rounded-full hover:bg-[#4080FF] disabled:opacity-50 font-medium transition-colors"
+            >
+              {loading ? 'Searching...' : 'Search'}
+            </button>
+          </div>
         </div>
       </div>
 
-      <div className="space-y-4">
+      {/* Skills Grid */}
+      <div>
+        <h2 className="text-2xl font-bold text-[#1D2129] mb-6">
+          Evaluated Tools {skills.length > 0 && `(${skills.length})`}
+        </h2>
+
         {skills.length === 0 && !loading && (
-          <div className="text-center text-gray-500 py-8">
-            No results. Try searching for a skill name.
+          <div className="text-center text-[#86909C] py-16 bg-white rounded-2xl border border-[#E5E6EB]">
+            No results. Try searching for a skill name or click Search to see all.
           </div>
         )}
         
-        {skills.map((skill) => (
-          <Link 
-            key={skill.skill_id} 
-            href={`/skills/${skill.skill_id}`}
-            className="block bg-white p-6 rounded-lg shadow hover:shadow-md transition-shadow"
-          >
-            <div className="flex items-start justify-between">
-              <div className="flex-1">
-                <div className="flex items-center gap-2">
-                  <h2 className="text-lg font-semibold text-gray-900">
-                    {skill.canonical_name}
-                  </h2>
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+          {skills.map((skill) => (
+            <Link 
+              key={skill.skill_id} 
+              href={`/skills/${skill.skill_id}`}
+              className="block bg-white rounded-2xl border border-[#E5E6EB] p-6 shadow-sm hover:shadow-md hover:border-[#165DFF] transition-all"
+            >
+              <div className="flex items-start justify-between mb-3">
+                <div className="flex items-center gap-3 flex-1">
+                  <div className="w-10 h-10 rounded-full bg-[#165DFF]/8 flex items-center justify-center">
+                    <span className="text-[#165DFF] font-semibold text-sm">
+                      {skill.canonical_name.substring(0, 2).toUpperCase()}
+                    </span>
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <h3 className="text-base font-semibold text-[#1D2129] truncate">
+                      {skill.canonical_name}
+                    </h3>
+                  </div>
                   <GradeBadge grade={skill.grade} />
                 </div>
-                <p className="text-sm text-gray-500 mt-1 font-mono">
-                  {skill.skill_id.substring(0, 16)}...
+              </div>
+              
+              {skill.description && (
+                <p className="text-sm text-[#4E5969] mb-4 line-clamp-2">
+                  {skill.description}
                 </p>
-                {skill.description && (
-                  <p className="text-gray-700 mt-2">
-                    {skill.description}
-                  </p>
-                )}
-                <div className="mt-3">
-                  <ScoreBar score={skill.score_total} />
+              )}
+              
+              <div className="space-y-2">
+                <ScoreBar score={skill.score_total} />
+                <div className="flex items-center gap-2 text-xs text-[#86909C]">
+                  <span>{skill.status}</span>
+                  <span>•</span>
+                  <span>Evidence: {skill.evidence_grade}</span>
                 </div>
               </div>
-              <div className="ml-4 flex flex-col gap-2">
-                <span className={`px-3 py-1 text-xs font-medium rounded-full ${
-                  skill.status === 'NEUTRAL_TESTED' ? 'bg-green-100 text-green-800' :
-                  skill.status === 'PENDING' ? 'bg-yellow-100 text-yellow-800' :
-                  'bg-gray-100 text-gray-800'
-                }`}>
-                  {skill.status}
-                </span>
-                <span className={`px-3 py-1 text-xs font-medium rounded-full ${
-                  skill.evidence_grade === 'D' ? 'bg-blue-100 text-blue-800' :
-                  'bg-purple-100 text-purple-800'
-                }`}>
-                  Grade: {skill.evidence_grade}
-                </span>
-              </div>
-            </div>
-          </Link>
-        ))}
+            </Link>
+          ))}
+        </div>
       </div>
     </div>
   )
