@@ -1,9 +1,15 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import Link from 'next/link'
 import GradeBadge from '@/components/skill/GradeBadge'
 import ScoreBar from '@/components/skill/ScoreBar'
+
+// 热门搜索关键词（硬编码）
+const POPULAR_KEYWORDS = [
+  '邮件', '日历', '数据分析', '代码审查', 
+  '翻译', '文档', '项目管理', 'API测试'
+]
 
 interface SkillSummary {
   skill_id: string
@@ -32,8 +38,23 @@ export default function HomePage() {
   const [total, setTotal] = useState(0)
   const [history, setHistory] = useState<HistoryItem[]>([])
   const [loading, setLoading] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const [showSuggestions, setShowSuggestions] = useState(false)
+  
+  // 防抖 timer
+  const searchTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const searchInputRef = useRef<HTMLInputElement>(null)
 
   const limit = 20
+
+  // Cleanup timer on unmount
+  useEffect(() => {
+    return () => {
+      if (searchTimer.current) {
+        clearTimeout(searchTimer.current)
+      }
+    }
+  }, [])
 
   // 页面加载时自动获取所有技能和历史记录
   useEffect(() => {
@@ -48,6 +69,7 @@ export default function HomePage() {
 
   const loadSkills = async (searchQuery: string = query) => {
     setLoading(true)
+    setError(null)
     try {
       const offset = (page - 1) * limit
       const params = new URLSearchParams({
@@ -60,6 +82,11 @@ export default function HomePage() {
       }
       
       const response = await fetch(`/api/v1/skills?${params.toString()}`)
+      
+      if (!response.ok) {
+        throw new Error('加载失败，请稍后重试')
+      }
+      
       const data = await response.json()
       
       // Handle both old (array) and new ({items, total}) response format
@@ -70,8 +97,9 @@ export default function HomePage() {
         setSkills(data.items || [])
         setTotal(data.total || 0)
       }
-    } catch (error) {
-      console.error('加载失败:', error)
+    } catch (err) {
+      console.error('加载失败:', err)
+      setError(err instanceof Error ? err.message : '加载失败，请稍后重试')
       setSkills([])
       setTotal(0)
     } finally {
@@ -91,7 +119,38 @@ export default function HomePage() {
 
   const handleSearch = () => {
     setPage(1)  // Reset to first page on new search
+    setShowSuggestions(false)
+    
+    // Clear timer if manually searching
+    if (searchTimer.current) {
+      clearTimeout(searchTimer.current)
+      searchTimer.current = null
+    }
+    
     loadSkills(query)
+  }
+
+  const handleInputChange = (value: string) => {
+    setQuery(value)
+    setShowSuggestions(false)
+    
+    // Clear old timer
+    if (searchTimer.current) {
+      clearTimeout(searchTimer.current)
+    }
+    
+    // Set new timer (300ms debounce)
+    searchTimer.current = setTimeout(() => {
+      setPage(1)
+      loadSkills(value)
+    }, 300)
+  }
+
+  const handleSuggestionClick = (keyword: string) => {
+    setQuery(keyword)
+    setShowSuggestions(false)
+    setPage(1)
+    loadSkills(keyword)
   }
 
   const handleSortChange = (newSort: string) => {
@@ -115,15 +174,42 @@ export default function HomePage() {
             发现、评估并对比各平台的 AI Skills
           </p>
           
-          <div className="flex gap-3">
-            <input
-              type="text"
-              value={query}
-              onChange={(e) => setQuery(e.target.value)}
-              onKeyPress={(e) => e.key === 'Enter' && handleSearch()}
-              placeholder="按名称或描述搜索..."
-              className="flex-1 px-4 py-3 bg-white border border-[#E5E6EB] rounded-xl focus:outline-none focus:ring-2 focus:ring-[#165DFF] focus:border-[#165DFF] text-[#1D2129]"
-            />
+          <div className="relative flex gap-3">
+            <div className="relative flex-1">
+              <input
+                ref={searchInputRef}
+                type="text"
+                value={query}
+                onChange={(e) => handleInputChange(e.target.value)}
+                onKeyPress={(e) => e.key === 'Enter' && handleSearch()}
+                onFocus={() => setShowSuggestions(true && !query)}
+                onBlur={() => setTimeout(() => setShowSuggestions(false), 200)}
+                placeholder="按名称或描述搜索..."
+                className="w-full px-4 py-3 bg-white border border-[#E5E6EB] rounded-xl focus:outline-none focus:ring-2 focus:ring-[#165DFF] focus:border-[#165DFF] text-[#1D2129]"
+              />
+              
+              {/* Search Suggestions Dropdown */}
+              {showSuggestions && !query && (
+                <div className="absolute top-full left-0 right-0 mt-2 bg-white border border-[#E5E6EB] rounded-xl shadow-lg z-10 overflow-hidden">
+                  <div className="p-3 border-b border-[#E5E6EB]">
+                    <p className="text-xs text-[#86909C] font-medium">热门搜索</p>
+                  </div>
+                  <div className="py-2">
+                    {POPULAR_KEYWORDS.map((keyword, idx) => (
+                      <button
+                        key={idx}
+                        onClick={() => handleSuggestionClick(keyword)}
+                        className="w-full px-4 py-2 text-left text-sm text-[#1D2129] hover:bg-[#F5F7FA] transition-colors flex items-center gap-2"
+                      >
+                        <span className="text-[#86909C]">🔍</span>
+                        {keyword}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+            
             <button
               onClick={handleSearch}
               disabled={loading}
@@ -163,9 +249,44 @@ export default function HomePage() {
           已评估工具
         </h2>
 
-        {skills.length === 0 && !loading && (
-          <div className="text-center text-[#86909C] py-16 bg-white rounded-2xl border border-[#E5E6EB]">
-            <p className="mb-4">暂无符合条件的技能</p>
+        {/* Error State */}
+        {error && (
+          <div className="text-center py-16 bg-white rounded-2xl border border-[#F53F3F]/20">
+            <div className="text-6xl mb-4">⚠️</div>
+            <p className="text-lg text-[#F53F3F] mb-2">{error}</p>
+            <button
+              onClick={() => loadSkills()}
+              className="mt-4 px-6 py-2 bg-[#165DFF] text-white rounded-full hover:bg-[#4080FF] transition-colors"
+            >
+              重试
+            </button>
+          </div>
+        )}
+
+        {/* Empty State */}
+        {!error && skills.length === 0 && !loading && (
+          <div className="text-center py-16 bg-white rounded-2xl border border-[#E5E6EB]">
+            <div className="text-6xl mb-4">🔍</div>
+            <p className="text-lg text-[#1D2129] mb-2">
+              {query ? `没有找到与「${query}」相关的技能` : '暂无评估的技能'}
+            </p>
+            <p className="text-sm text-[#86909C] mb-6">
+              {query ? '试试以下热门搜索或调整搜索关键词' : '试试搜索以下热门类别'}
+            </p>
+            
+            {/* Suggestion Chips */}
+            <div className="flex flex-wrap justify-center gap-2 mb-6">
+              {POPULAR_KEYWORDS.slice(0, 5).map((keyword, idx) => (
+                <button
+                  key={idx}
+                  onClick={() => handleSuggestionClick(keyword)}
+                  className="px-4 py-2 bg-[#165DFF]/10 text-[#165DFF] rounded-full hover:bg-[#165DFF]/20 transition-colors text-sm font-medium"
+                >
+                  {keyword}
+                </button>
+              ))}
+            </div>
+            
             {query && (
               <button
                 onClick={() => {
@@ -175,7 +296,7 @@ export default function HomePage() {
                 }}
                 className="text-[#165DFF] hover:text-[#4080FF] text-sm font-medium"
               >
-                重置筛选条件
+                清除搜索条件
               </button>
             )}
           </div>
