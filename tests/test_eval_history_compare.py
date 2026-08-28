@@ -7,22 +7,14 @@ from pathlib import Path
 from unittest.mock import patch, MagicMock
 
 import pytest
-from fastapi.testclient import TestClient
 
-from api.main import app
-from db import SessionLocal
 from db.models import Evaluation
 
 
-client = TestClient(app)
-
-
-def test_evaluation_saved_on_eval():
+def test_evaluation_saved_on_eval(client, db_session):
     """Evaluation should be saved to database after /eval."""
     # Count evaluations before
-    db = SessionLocal()
-    count_before = db.query(Evaluation).count()
-    db.close()
+    count_before = db_session.query(Evaluation).count()
     
     # Create temp repo
     with tempfile.TemporaryDirectory() as tmpdir:
@@ -42,15 +34,14 @@ def test_evaluation_saved_on_eval():
             assert response.status_code == 200
     
     # Count evaluations after
-    db = SessionLocal()
-    count_after = db.query(Evaluation).count()
-    db.close()
+    db_session.expire_all()  # Refresh session
+    count_after = db_session.query(Evaluation).count()
     
     # Should have one more
     assert count_after == count_before + 1
 
 
-def test_history_returns_list():
+def test_history_returns_list(client, db_session):
     """History endpoint should return list of evaluations."""
     # First, create an evaluation
     with tempfile.TemporaryDirectory() as tmpdir:
@@ -88,7 +79,7 @@ def test_history_returns_list():
         assert "scanned_at" in result
 
 
-def test_compare_two_results():
+def test_compare_two_results(client, db_session):
     """Compare endpoint should return multiple evaluation details."""
     # Create two evaluations
     eval_ids = []
@@ -109,10 +100,9 @@ def test_compare_two_results():
                 )
                 
                 # Get the ID from database
-                db = SessionLocal()
-                latest = db.query(Evaluation).order_by(Evaluation.id.desc()).first()
+                db_session.expire_all()
+                latest = db_session.query(Evaluation).order_by(Evaluation.id.desc()).first()
                 eval_ids.append(latest.id)
-                db.close()
     
     # Compare
     ids_str = ",".join(str(id) for id in eval_ids)
@@ -133,7 +123,7 @@ def test_compare_two_results():
         assert "meta" in result
 
 
-def test_compare_empty_returns_empty():
+def test_compare_empty_returns_empty(client):
     """Compare with non-existent IDs should return empty results."""
     response = client.get("/api/v1/eval/compare?ids=999999,999998")
     
@@ -144,7 +134,7 @@ def test_compare_empty_returns_empty():
     assert len(data["results"]) == 0
 
 
-def test_history_pagination():
+def test_history_pagination(client):
     """History pagination should work correctly."""
     # Query with limit=1
     response = client.get("/api/v1/eval/history?limit=1&offset=0")
@@ -158,12 +148,10 @@ def test_history_pagination():
     assert data["offset"] == 0
 
 
-def test_upload_saves_to_history():
+def test_upload_saves_to_history(client, db_session):
     """ZIP upload should also save to history."""
     # Count before
-    db = SessionLocal()
-    count_before = db.query(Evaluation).count()
-    db.close()
+    count_before = db_session.query(Evaluation).count()
     
     # Create and upload ZIP
     files = {"README.md": "# Upload Test"}
@@ -181,9 +169,8 @@ def test_upload_saves_to_history():
     assert response.status_code == 200
     
     # Count after
-    db = SessionLocal()
-    count_after = db.query(Evaluation).count()
-    db.close()
+    db_session.expire_all()
+    count_after = db_session.query(Evaluation).count()
     
     # Should have one more
     assert count_after == count_before + 1

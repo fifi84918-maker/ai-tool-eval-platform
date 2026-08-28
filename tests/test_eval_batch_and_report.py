@@ -5,15 +5,9 @@ from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 import pytest
-from fastapi.testclient import TestClient
-
-from api.main import app
 
 
-client = TestClient(app)
-
-
-def test_batch_endpoint_returns_list():
+def test_batch_endpoint_returns_list(client):
     """Batch endpoint should return list of results."""
     with tempfile.TemporaryDirectory() as tmpdir:
         tmpdir_path = Path(tmpdir)
@@ -46,7 +40,7 @@ def test_batch_endpoint_returns_list():
                     assert "grade" in result
 
 
-def test_batch_partial_failure():
+def test_batch_partial_failure(client):
     """Batch should handle partial failures gracefully."""
     with tempfile.TemporaryDirectory() as tmpdir:
         tmpdir_path = Path(tmpdir)
@@ -89,7 +83,7 @@ def test_batch_partial_failure():
             assert len(successes) >= 0  # May vary based on timing
 
 
-def test_report_json_format():
+def test_report_json_format(client):
     """Report endpoint should return JSON by default."""
     with tempfile.TemporaryDirectory() as tmpdir:
         tmpdir_path = Path(tmpdir)
@@ -124,7 +118,7 @@ def test_report_json_format():
             assert "has_dockerfile" in data["meta"]
 
 
-def test_report_markdown_format():
+def test_report_markdown_format(client):
     """Report endpoint should return markdown when requested."""
     with tempfile.TemporaryDirectory() as tmpdir:
         tmpdir_path = Path(tmpdir)
@@ -160,7 +154,7 @@ def test_report_markdown_format():
             assert "Primary Language:" in content
 
 
-def test_batch_limit_max_10():
+def test_batch_limit_max_10(client):
     """Batch endpoint should reject more than 10 URLs."""
     urls = [f"https://github.com/test/repo{i}" for i in range(11)]
     
@@ -173,7 +167,7 @@ def test_batch_limit_max_10():
     assert "Maximum 10" in response.json()["detail"]
 
 
-def test_report_invalid_format():
+def test_report_invalid_format(client):
     """Report endpoint should reject invalid format parameter."""
     response = client.get(
         "/api/v1/eval/report",
@@ -184,7 +178,7 @@ def test_report_invalid_format():
     assert "json" in response.json()["detail"].lower() or "markdown" in response.json()["detail"].lower()
 
 
-def test_batch_empty_list():
+def test_batch_empty_list(client):
     """Batch endpoint should reject empty URL list."""
     response = client.post(
         "/api/v1/eval/batch",

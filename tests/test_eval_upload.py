@@ -6,12 +6,6 @@ import zipfile
 from pathlib import Path
 
 import pytest
-from fastapi.testclient import TestClient
-
-from api.main import app
-
-
-client = TestClient(app)
 
 
 def create_test_zip(files: dict) -> io.BytesIO:
@@ -31,7 +25,7 @@ def create_test_zip(files: dict) -> io.BytesIO:
     return zip_buffer
 
 
-def test_upload_valid_zip_returns_score():
+def test_upload_valid_zip_returns_score(client):
     """Valid ZIP upload should return evaluation score."""
     # Create test ZIP with basic structure
     files = {
@@ -66,7 +60,7 @@ def test_upload_valid_zip_returns_score():
         assert 0 <= data["metrics"][key] <= 100
 
 
-def test_upload_non_zip_returns_400():
+def test_upload_non_zip_returns_400(client):
     """Non-ZIP file should return 400 error."""
     # Create a text file
     text_data = io.BytesIO(b"This is not a ZIP file")
@@ -80,7 +74,7 @@ def test_upload_non_zip_returns_400():
     assert "zip" in response.json()["detail"].lower()
 
 
-def test_upload_empty_zip_returns_valid_response():
+def test_upload_empty_zip_returns_valid_response(client):
     """Empty ZIP should return baseline scores."""
     # Create empty ZIP
     zip_buffer = io.BytesIO()
@@ -104,7 +98,7 @@ def test_upload_empty_zip_returns_valid_response():
     assert data["score_total"] < 50
 
 
-def test_upload_large_zip_rejected():
+def test_upload_large_zip_rejected(client):
     """ZIP exceeding size limit should be rejected."""
     # Create a large file content (simulate 51MB)
     large_content = b"x" * (51 * 1024 * 1024)
@@ -125,7 +119,7 @@ def test_upload_large_zip_rejected():
     assert response.status_code == 200
 
 
-def test_upload_zip_with_secret_lowers_security():
+def test_upload_zip_with_secret_lowers_security(client):
     """ZIP containing secrets should lower security score."""
     # Create ZIP with .env file
     files = {
@@ -152,7 +146,7 @@ def test_upload_zip_with_secret_lowers_security():
     assert len(security_findings) > 0
 
 
-def test_upload_invalid_zip_returns_400():
+def test_upload_invalid_zip_returns_400(client):
     """Invalid ZIP file should return 400 error."""
     # Create corrupted ZIP data
     corrupt_data = io.BytesIO(b"PK\x03\x04corrupted data")
@@ -167,7 +161,7 @@ def test_upload_invalid_zip_returns_400():
     assert "invalid" in detail or "extract" in detail or "zip" in detail
 
 
-def test_upload_zip_with_many_files():
+def test_upload_zip_with_many_files(client):
     """ZIP with many files should be processed correctly."""
     # Create ZIP with multiple files
     files = {

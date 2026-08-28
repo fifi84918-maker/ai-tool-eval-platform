@@ -6,15 +6,9 @@ from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 import pytest
-from fastapi.testclient import TestClient
-
-from api.main import app
 
 
-client = TestClient(app)
-
-
-def test_valid_github_url_returns_score():
+def test_valid_github_url_returns_score(client):
     """Valid GitHub URL triggers clone and returns score."""
     with tempfile.TemporaryDirectory() as tmpdir:
         tmpdir_path = Path(tmpdir)
@@ -45,7 +39,7 @@ def test_valid_github_url_returns_score():
             assert data["grade"] in ["A", "B", "C", "D", "U"]
 
 
-def test_invalid_url_returns_400():
+def test_invalid_url_returns_400(client):
     """Non-GitHub URL returns 400 error."""
     response = client.post(
         "/api/v1/eval",
@@ -56,7 +50,7 @@ def test_invalid_url_returns_400():
     assert "github" in response.json()["detail"].lower()
 
 
-def test_clone_failure_returns_400():
+def test_clone_failure_returns_400(client):
     """Clone failure returns 400 with error message."""
     import subprocess
     
@@ -74,7 +68,7 @@ def test_clone_failure_returns_400():
         assert "clone" in response.json()["detail"].lower()
 
 
-def test_metrics_extraction_logic():
+def test_metrics_extraction_logic(client):
     """Metrics extraction correctly scores repo features."""
     from analyzer.static_scan import scan_repository
     
@@ -106,7 +100,7 @@ def test_metrics_extraction_logic():
         assert metrics["reliability"] >= 60
 
 
-def test_response_schema():
+def test_response_schema(client):
     """Response contains all required fields."""
     with tempfile.TemporaryDirectory() as tmpdir:
         tmpdir_path = Path(tmpdir)
@@ -146,7 +140,7 @@ def test_response_schema():
             assert "performance" in data["metrics"]
 
 
-def test_clone_timeout_returns_408():
+def test_clone_timeout_returns_408(client):
     """Clone timeout returns 400 error with timeout message."""
     import subprocess
     
