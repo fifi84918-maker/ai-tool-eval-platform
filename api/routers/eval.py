@@ -6,12 +6,13 @@ import os
 import shutil
 import subprocess
 import tempfile
+import zipfile
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime
 from pathlib import Path
 from typing import List, Optional
 
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, HTTPException, Query, UploadFile, File
 from fastapi.responses import PlainTextResponse
 from pydantic import BaseModel
 
@@ -250,3 +251,77 @@ async def get_evaluation_report(
     markdown_content = "\n".join(md_lines)
     
     return PlainTextResponse(content=markdown_content, media_type="text/markdown")
+
+
+@router.post("/upload", response_model=EvalResponse)
+async def evaluate_zip_upload(file: UploadFile = File(...)):
+    """Evaluate uploaded ZIP file.
+    
+    Args:
+        file: Uploaded ZIP file (max 50MB)
+        
+    Returns:
+        Score result with metrics breakdown, findings, and metadata
+    """
+    # Validate file type
+    if not file.filename or not file.filename.endswith('.zip'):
+        raise HTTPException(status_code=400, detail="Only ZIP files are supported")
+    
+    tmpdir = None
+    zip_path = None
+    
+    try:
+        # Create temporary directory
+        tmpdir = tempfile.mkdtemp(prefix="upload_")
+        tmpdir_path = Path(tmpdir)
+        
+        # Save uploaded file
+        zip_path = tmpdir_path / "upload.zip"
+        content = await file.read()
+        
+        # Check file size (50MB limit)
+        if len(content) > 50 * 1024 * 1024:
+            raise HTTPException(status_code=400, detail="File size exceeds 50MB limit")
+        
+        zip_path.write_bytes(content)
+        
+        # Extract ZIP
+        extract_dir = tmpdir_path / "extracted"
+        extract_dir.mkdir()
+        
+        try:
+            with zipfile.ZipFile(zip_path, 'r') as zip_ref:
+                # Check number of files (prevent zip bomb)
+                file_list = zip_ref.namelist()
+                if len(file_list) > 500:
+                    raise HTTPException(status_code=400, detail="ZIP contains too many files (max 500)")
+                
+                # Extract
+                zip_ref.extractall(extract_dir)
+        except zipfile.BadZipFile:
+            raise HTTPException(status_code=400, detail="Invalid ZIP file")
+        except Exception as e:
+            raise HTTPException(status_code=400, detail=f"Failed to extract ZIP: {str(e)}")
+        
+        # Scan extracted content
+        scan_result = scan_repository(str(extract_dir))
+        
+        # Score with engine
+        score_result = score_skill(scan_result["metrics"])
+        
+        # Build response
+        return EvalResponse(
+            repo_url=f"uploaded:{file.filename}",
+            metrics=scan_result["metrics"],
+            score_total=score_result["total"],
+            grade=score_result["grade"],
+            breakdown=score_result["breakdown"],
+            scanned_at=datetime.utcnow().isoformat() + "Z",
+            findings=scan_result["findings"],
+            meta=scan_result["meta"],
+        )
+        
+    finally:
+        # Cleanup
+        if tmpdir and os.path.exists(tmpdir):
+            shutil.rmtree(tmpdir, ignore_errors=True)

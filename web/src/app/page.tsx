@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import Link from 'next/link'
 import GradeBadge from '@/components/skill/GradeBadge'
 import ScoreBar from '@/components/skill/ScoreBar'
@@ -21,17 +21,27 @@ export default function HomePage() {
   const [skills, setSkills] = useState<SkillSummary[]>([])
   const [loading, setLoading] = useState(false)
 
-  const handleSearch = async () => {
+  // 页面加载时自动获取所有技能
+  useEffect(() => {
+    loadSkills()
+  }, [])
+
+  const loadSkills = async (searchQuery: string = '') => {
     setLoading(true)
     try {
-      const response = await fetch(`/api/skills?query=${encodeURIComponent(query)}&limit=20`)
+      const queryParam = searchQuery ? `?q=${encodeURIComponent(searchQuery)}&limit=20` : '?limit=20'
+      const response = await fetch(`/api/skills${queryParam}`)
       const data = await response.json()
       setSkills(data)
     } catch (error) {
-      console.error('Search failed:', error)
+      console.error('加载失败:', error)
     } finally {
       setLoading(false)
     }
+  }
+
+  const handleSearch = () => {
+    loadSkills(query)
   }
 
   return (
@@ -40,10 +50,10 @@ export default function HomePage() {
       <div className="bg-white rounded-2xl border border-[#E5E6EB] p-8 shadow-sm">
         <div className="max-w-3xl mx-auto text-center">
           <h1 className="text-4xl font-bold text-[#1D2129] mb-4">
-            AI Skill Benchmark Platform
+            AI Skill 评测平台
           </h1>
           <p className="text-lg text-[#4E5969] mb-8">
-            Discover, evaluate, and compare AI skills across platforms
+            发现、评估并对比各平台的 AI Skills
           </p>
           
           <div className="flex gap-3">
@@ -52,7 +62,7 @@ export default function HomePage() {
               value={query}
               onChange={(e) => setQuery(e.target.value)}
               onKeyPress={(e) => e.key === 'Enter' && handleSearch()}
-              placeholder="Search by name or description..."
+              placeholder="按名称或描述搜索..."
               className="flex-1 px-4 py-3 bg-white border border-[#E5E6EB] rounded-xl focus:outline-none focus:ring-2 focus:ring-[#165DFF] focus:border-[#165DFF] text-[#1D2129]"
             />
             <button
@@ -60,7 +70,7 @@ export default function HomePage() {
               disabled={loading}
               className="px-8 py-3 bg-[#165DFF] text-white rounded-full hover:bg-[#4080FF] disabled:opacity-50 font-medium transition-colors"
             >
-              {loading ? 'Searching...' : 'Search'}
+              {loading ? '搜索中...' : '搜索'}
             </button>
           </div>
         </div>
@@ -69,12 +79,12 @@ export default function HomePage() {
       {/* Skills Grid */}
       <div>
         <h2 className="text-2xl font-bold text-[#1D2129] mb-6">
-          Evaluated Tools {skills.length > 0 && `(${skills.length})`}
+          已评估工具 {skills.length > 0 && `(${skills.length})`}
         </h2>
 
         {skills.length === 0 && !loading && (
           <div className="text-center text-[#86909C] py-16 bg-white rounded-2xl border border-[#E5E6EB]">
-            No results. Try searching for a skill name or click Search to see all.
+            暂无结果。可输入技能名称搜索，或点击&ldquo;搜索&rdquo;查看全部。
           </div>
         )}
         
@@ -112,7 +122,7 @@ export default function HomePage() {
                 <div className="flex items-center gap-2 text-xs text-[#86909C]">
                   <span>{skill.status}</span>
                   <span>•</span>
-                  <span>Evidence: {skill.evidence_grade}</span>
+                  <span>证据等级: {skill.evidence_grade}</span>
                 </div>
               </div>
             </Link>
