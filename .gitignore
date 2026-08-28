@@ -21,3 +21,10 @@ web/out/
 web/.env*.local
 web/next-env.d.ts
 
+# Collaboration infra
+tasks/last_output.md
+tasks/prev_output.md
+skillbench.db
+sample_report.md
+.pytest_cache/
+
