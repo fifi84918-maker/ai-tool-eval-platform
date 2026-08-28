@@ -62,6 +62,16 @@ def _build_entry(sample: TrialSample) -> _IndexEntry:
         else ""
     )
     grade = clamp_evidence_grade("D" if report.sandbox_report else None)
+    
+    # Assign category_tags based on sample characteristics (Phase 1 MVP)
+    category_mapping = {
+        "S1-green": ("documentation",),  # doc-skill
+        "S2-no-skillmd": ("development",),  # loose repo
+        "S3-highrisk-perms": ("productivity",),  # cleaner-skill
+        "S4-d008-rights": ("development",),  # unknown license
+        "S5-secrets": ("security",),  # leaky-skill with secrets
+    }
+    category_tags = category_mapping.get(sample.sample_id, ())
 
     summary = SkillSummary(
         skill_id=report.skill_id,
@@ -79,7 +89,7 @@ def _build_entry(sample: TrialSample) -> _IndexEntry:
         or sample.raw_item.get("author"),
         license_spdx=None,
         declared_permissions=tuple(sample.declared_permissions or ()),
-        category_tags=(),
+        category_tags=category_tags,
         is_alive=True,
         static_summary=dict(report.static_report.summary)
         if report.static_report
