@@ -58,7 +58,10 @@ def search_skills(
     
     # Sort
     if sort_by == "recent":
-        # Sort by skill_id as proxy (no updated_at in memory index)
+        # TODO: Sort by updated_at when available
+        # Current limitation: InMemorySkillIndex samples have no timestamp fields.
+        # Database implementation should add updated_at to Skill model and sort by it.
+        # For now, we sort by skill_id as a proxy (alphabetical/insertion order).
         results_list.sort(key=lambda x: x.get("skill_id", ""), reverse=True)
     else:  # score
         results_list.sort(key=lambda x: x.get("score_total") or 0, reverse=True)
