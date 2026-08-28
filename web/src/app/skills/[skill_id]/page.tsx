@@ -1,3 +1,4 @@
+import Link from 'next/link'
 import GradeBadge from '@/components/skill/GradeBadge'
 import ScoreBar from '@/components/skill/ScoreBar'
 
@@ -17,6 +18,19 @@ interface SkillDetail {
   license_spdx: string | null
   warnings: string[]
   json_ld: any | null
+  // Future: dimension scores when available
+  metrics?: {
+    accuracy?: number
+    reliability?: number
+    security?: number
+    performance?: number
+  }
+  findings?: Array<{
+    dimension: string
+    severity: string
+    message: string
+  }>
+  scanned_at?: string
 }
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:8000'
@@ -87,12 +101,148 @@ export default async function SkillDetailPage({
         {skill.summary.score_total !== null && skill.summary.score_total !== undefined && (
           <div className="mb-8 p-6 bg-[#F5F7FA] rounded-2xl">
             <div className="flex items-center justify-between mb-4">
-              <h3 className="text-sm font-medium text-[#4E5969]">Quality Score</h3>
+              <h3 className="text-sm font-medium text-[#4E5969]">综合评分</h3>
               <span className="text-5xl font-bold text-[#165DFF]">
                 {skill.summary.score_total.toFixed(1)}
               </span>
             </div>
             <ScoreBar score={skill.summary.score_total} />
+            {skill.scanned_at && (
+              <p className="text-xs text-[#86909C] mt-3">
+                评测时间: {new Date(skill.scanned_at).toLocaleString('zh-CN')}
+              </p>
+            )}
+          </div>
+        )}
+
+        {/* Dimension Scores (if available) */}
+        {skill.metrics && Object.keys(skill.metrics).length > 0 && (
+          <div className="mb-8">
+            <h3 className="text-lg font-semibold text-[#1D2129] mb-4">维度评分</h3>
+            <div className="space-y-4">
+              {skill.metrics.accuracy !== undefined && (
+                <div>
+                  <div className="flex items-center justify-between mb-2">
+                    <span className="text-sm font-medium text-[#1D2129]">准确性 Accuracy</span>
+                    <span className="text-lg font-bold text-[#165DFF]">{skill.metrics.accuracy.toFixed(1)}</span>
+                  </div>
+                  <div className="bg-[#E5E6EB] rounded-full h-3">
+                    <div
+                      className="bg-[#165DFF] h-3 rounded-full transition-all duration-300"
+                      style={{ width: `${skill.metrics.accuracy}%` }}
+                    />
+                  </div>
+                </div>
+              )}
+
+              {skill.metrics.reliability !== undefined && (
+                <div>
+                  <div className="flex items-center justify-between mb-2">
+                    <span className="text-sm font-medium text-[#1D2129]">可靠性 Reliability</span>
+                    <span className="text-lg font-bold text-[#00B42A]">{skill.metrics.reliability.toFixed(1)}</span>
+                  </div>
+                  <div className="bg-[#E5E6EB] rounded-full h-3">
+                    <div
+                      className="bg-[#00B42A] h-3 rounded-full transition-all duration-300"
+                      style={{ width: `${skill.metrics.reliability}%` }}
+                    />
+                  </div>
+                </div>
+              )}
+
+              {skill.metrics.security !== undefined && (
+                <div>
+                  <div className="flex items-center justify-between mb-2">
+                    <span className="text-sm font-medium text-[#1D2129]">安全性 Security</span>
+                    <span className="text-lg font-bold text-[#FF7D00]">{skill.metrics.security.toFixed(1)}</span>
+                  </div>
+                  <div className="bg-[#E5E6EB] rounded-full h-3">
+                    <div
+                      className="bg-[#FF7D00] h-3 rounded-full transition-all duration-300"
+                      style={{ width: `${skill.metrics.security}%` }}
+                    />
+                  </div>
+                </div>
+              )}
+
+              {skill.metrics.performance !== undefined && (
+                <div>
+                  <div className="flex items-center justify-between mb-2">
+                    <span className="text-sm font-medium text-[#1D2129]">性能 Performance</span>
+                    <span className="text-lg font-bold text-[#722ED1]">{skill.metrics.performance.toFixed(1)}</span>
+                  </div>
+                  <div className="bg-[#E5E6EB] rounded-full h-3">
+                    <div
+                      className="bg-[#722ED1] h-3 rounded-full transition-all duration-300"
+                      style={{ width: `${skill.metrics.performance}%` }}
+                    />
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* Findings (if available) */}
+        {skill.findings && skill.findings.length > 0 && (
+          <div className="mb-8">
+            <h3 className="text-lg font-semibold text-[#1D2129] mb-4">发现问题</h3>
+            <div className="space-y-3">
+              {skill.findings.map((finding, idx) => (
+                <div
+                  key={idx}
+                  className={`p-4 rounded-xl border ${
+                    finding.severity === 'high' || finding.severity === 'critical'
+                      ? 'bg-[#F53F3F]/5 border-[#F53F3F]/20'
+                      : finding.severity === 'medium'
+                      ? 'bg-[#FF7D00]/5 border-[#FF7D00]/20'
+                      : 'bg-[#86909C]/5 border-[#86909C]/20'
+                  }`}
+                >
+                  <div className="flex items-start gap-3">
+                    <span className="text-lg">
+                      {finding.severity === 'high' || finding.severity === 'critical' ? '🔴' :
+                       finding.severity === 'medium' ? '🟡' : '⚪'}
+                    </span>
+                    <div className="flex-1">
+                      <div className="flex items-center gap-2 mb-1">
+                        <span className={`text-xs font-medium px-2 py-0.5 rounded ${
+                          finding.severity === 'high' || finding.severity === 'critical'
+                            ? 'bg-[#F53F3F] text-white'
+                            : finding.severity === 'medium'
+                            ? 'bg-[#FF7D00] text-white'
+                            : 'bg-[#86909C] text-white'
+                        }`}>
+                          {finding.severity.toUpperCase()}
+                        </span>
+                        <span className="text-xs text-[#86909C]">{finding.dimension}</span>
+                      </div>
+                      <p className="text-sm text-[#1D2129]">{finding.message}</p>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* Evaluate Button (for GitHub repos) */}
+        {skill.summary.origin_url.includes('github.com') && (
+          <div className="mb-8 p-6 bg-gradient-to-r from-[#165DFF]/5 to-[#722ED1]/5 rounded-2xl border border-[#165DFF]/20">
+            <div className="flex items-center justify-between">
+              <div>
+                <h3 className="text-base font-semibold text-[#1D2129] mb-1">获取详细评分</h3>
+                <p className="text-sm text-[#4E5969]">
+                  评估此 Skill 的 GitHub 仓库，获取维度分数、代码质量分析和安全发现
+                </p>
+              </div>
+              <Link
+                href={`/eval?url=${encodeURIComponent(skill.summary.origin_url)}`}
+                className="px-6 py-3 bg-[#165DFF] text-white rounded-full hover:bg-[#4080FF] transition-colors font-medium whitespace-nowrap"
+              >
+                立即评估 →
+              </Link>
+            </div>
           </div>
         )}
 
