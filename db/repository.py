@@ -5,7 +5,7 @@ from typing import Optional
 from sqlalchemy import or_
 from sqlalchemy.orm import Session
 
-from db.models import Skill, ArtifactReference
+from db.models import Skill, ArtifactReference, SourceRecord, ArtifactVersion, LicenseAssessment
 from mcp_server.policy import scrub, clamp_evidence_grade
 
 
@@ -214,3 +214,131 @@ class SkillRepository:
         }
         
         return scrub(skill_dict)
+
+
+class SourceRepository:
+    """Repository for SourceRecord operations (V1A PRD 22.1)."""
+    
+    def __init__(self, session: Session):
+        self.session = session
+    
+    def get_by_id(self, source_id: str) -> Optional[SourceRecord]:
+        """Get source record by ID."""
+        return self.session.query(SourceRecord).filter_by(id=source_id).first()
+    
+    def get_by_platform_object(self, platform: str, platform_object_id: str) -> Optional[SourceRecord]:
+        """Get source record by platform and platform_object_id."""
+        return self.session.query(SourceRecord).filter_by(
+            platform=platform,
+            platform_object_id=platform_object_id
+        ).first()
+    
+    def upsert_by_platform(
+        self, 
+        platform: str, 
+        platform_object_id: str, 
+        **fields
+    ) -> SourceRecord:
+        """Insert or update source record by platform+platform_object_id.
+        
+        Args:
+            platform: Platform identifier (e.g., 'github', 'huggingface')
+            platform_object_id: Platform-specific object ID
+            **fields: Additional fields to set/update
+            
+        Returns:
+            SourceRecord instance after upsert
+        """
+        existing = self.get_by_platform_object(platform, platform_object_id)
+        
+        if existing:
+            # Update existing record
+            for key, value in fields.items():
+                if hasattr(existing, key):
+                    setattr(existing, key, value)
+            self.session.flush()
+            return existing
+        else:
+            # Create new record
+            source_id = fields.pop("id", f"{platform}::{platform_object_id}")
+            new_record = SourceRecord(
+                id=source_id,
+                platform=platform,
+                platform_object_id=platform_object_id,
+                **fields
+            )
+            self.session.add(new_record)
+            self.session.flush()
+            return new_record
+    
+    def list_acquired(self, limit: int = 100) -> list[SourceRecord]:
+        """List source records with acquired=True."""
+        return self.session.query(SourceRecord).filter_by(acquired=True).limit(limit).all()
+
+
+class ArtifactVersionRepository:
+    """Repository for ArtifactVersion operations (V1A PRD 22.1)."""
+    
+    def __init__(self, session: Session):
+        self.session = session
+    
+    def get_by_id(self, artifact_id: str) -> Optional[ArtifactVersion]:
+        """Get artifact version by ID."""
+        return self.session.query(ArtifactVersion).filter_by(id=artifact_id).first()
+    
+    def get_by_content_hash(self, content_hash: str) -> Optional[ArtifactVersion]:
+        """Get artifact version by content hash."""
+        return self.session.query(ArtifactVersion).filter_by(content_hash=content_hash).first()
+    
+    def add(self, artifact_version: ArtifactVersion) -> ArtifactVersion:
+        """Add new artifact version.
+        
+        Args:
+            artifact_version: ArtifactVersion instance to add
+            
+        Returns:
+            Added ArtifactVersion instance
+        """
+        self.session.add(artifact_version)
+        self.session.flush()
+        return artifact_version
+    
+    def list_by_source(self, source_id: str, limit: int = 100) -> list[ArtifactVersion]:
+        """List artifact versions for a given source."""
+        return self.session.query(ArtifactVersion).filter_by(source_id=source_id).limit(limit).all()
+
+
+class LicenseRepository:
+    """Repository for LicenseAssessment operations (V1A PRD 22.1)."""
+    
+    def __init__(self, session: Session):
+        self.session = session
+    
+    def get_by_id(self, assessment_id: str) -> Optional[LicenseAssessment]:
+        """Get license assessment by ID."""
+        return self.session.query(LicenseAssessment).filter_by(id=assessment_id).first()
+    
+    def get_by_artifact_version(self, artifact_version_id: str) -> Optional[LicenseAssessment]:
+        """Get license assessment for an artifact version."""
+        return self.session.query(LicenseAssessment).filter_by(
+            artifact_version_id=artifact_version_id
+        ).first()
+    
+    def add(self, assessment: LicenseAssessment) -> LicenseAssessment:
+        """Add new license assessment.
+        
+        Args:
+            assessment: LicenseAssessment instance to add
+            
+        Returns:
+            Added LicenseAssessment instance
+        """
+        self.session.add(assessment)
+        self.session.flush()
+        return assessment
+    
+    def list_needs_review(self, limit: int = 100) -> list[LicenseAssessment]:
+        """List assessments that need human review."""
+        return self.session.query(LicenseAssessment).filter_by(
+            needs_human_review=True
+        ).limit(limit).all()

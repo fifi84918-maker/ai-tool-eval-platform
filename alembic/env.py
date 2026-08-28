@@ -22,7 +22,7 @@ if config.config_file_name is not None:
 # add your model's MetaData object here
 # for 'autogenerate' support
 from db import Base
-from db.models import Skill, ArtifactReference  # noqa: F401
+from db.models import Skill, ArtifactReference, Evaluation, SourceRecord, ArtifactVersion, LicenseAssessment  # noqa: F401
 
 target_metadata = Base.metadata
 

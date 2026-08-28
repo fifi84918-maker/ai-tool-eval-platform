@@ -1,9 +1,9 @@
-"""SQLAlchemy models for Skill entities."""
+"""SQLAlchemy models for Skill entities and V1A source/artifact/license models."""
 
 from datetime import datetime
 from typing import Optional
 
-from sqlalchemy import JSON, Boolean, DateTime, Float, Integer, String, Text
+from sqlalchemy import JSON, Boolean, DateTime, Float, Integer, String, Text, ForeignKey, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column
 
 from db import Base
@@ -106,3 +106,103 @@ class Evaluation(Base):
 
     def __repr__(self) -> str:
         return f"<Evaluation(id={self.id}, repo_url={self.repo_url!r}, grade={self.grade!r})>"
+
+
+class SourceRecord(Base):
+    """来源记录表：存储从各平台发现的 AI Skill 来源对象（PRD 22.1）。
+    
+    用于记录采集来源元数据，支持跨平台追溯和版本管理。
+    """
+    __tablename__ = "source_records"
+
+    id: Mapped[str] = mapped_column(String(256), primary_key=True)
+    platform: Mapped[str] = mapped_column(String(32), nullable=False)
+    platform_object_id: Mapped[Optional[str]] = mapped_column(String(256), nullable=True)
+    skill_name: Mapped[Optional[str]] = mapped_column(String(256), nullable=True)
+    raw_description: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    author: Mapped[str] = mapped_column(String(256), nullable=False, default="")
+    origin_url: Mapped[str] = mapped_column(Text, nullable=False, index=True)
+    
+    # Timestamps
+    discovered_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, default=datetime.utcnow)
+    last_synced_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
+    
+    # Metadata
+    visibility: Mapped[str] = mapped_column(String(16), nullable=False, default="public")
+    license: Mapped[str] = mapped_column(String(64), nullable=False, default="unknown")
+    content_hash: Mapped[Optional[str]] = mapped_column(String(64), nullable=True, index=True)
+    
+    # Rights (PRD 7.1)
+    acquired: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    allow_internal_test: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    allow_public_display: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    allow_retain_copy: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    withdrawn: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    
+    # Raw payload snapshot
+    raw_payload: Mapped[Optional[dict]] = mapped_column(JSON, nullable=True)
+    
+    # Timestamps
+    created_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, default=datetime.utcnow)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime, nullable=False, default=datetime.utcnow, onupdate=datetime.utcnow
+    )
+
+    def __repr__(self) -> str:
+        return f"<SourceRecord(id={self.id!r}, platform={self.platform!r}, skill_name={self.skill_name!r})>"
+
+
+class ArtifactVersion(Base):
+    """制品版本表：存储特定版本的制品快照（PRD 22.1）。
+    
+    用于版本管理和内容追溯，关联来源记录。
+    """
+    __tablename__ = "artifact_versions"
+
+    id: Mapped[str] = mapped_column(String(256), primary_key=True)
+    skill_id: Mapped[Optional[str]] = mapped_column(String(128), nullable=True, index=True)
+    source_id: Mapped[Optional[str]] = mapped_column(
+        String(256), ForeignKey("source_records.id", ondelete="SET NULL"), nullable=True, index=True
+    )
+    version: Mapped[str] = mapped_column(String(128), nullable=False, default="latest")
+    fetched_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, default=datetime.utcnow)
+    content_hash: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
+    archive_path: Mapped[Optional[str]] = mapped_column(String(512), nullable=True)
+    normalized: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, default=datetime.utcnow)
+
+    def __repr__(self) -> str:
+        return f"<ArtifactVersion(id={self.id!r}, version={self.version!r}, content_hash={self.content_hash!r})>"
+
+
+class LicenseAssessment(Base):
+    """许可证判定表：存储制品的许可证评估结果（PRD 22.1）。
+    
+    用于记录许可证检测和权限判定，支持合规性管理。
+    """
+    __tablename__ = "license_assessments"
+
+    id: Mapped[str] = mapped_column(String(256), primary_key=True)
+    artifact_version_id: Mapped[Optional[str]] = mapped_column(
+        String(256), 
+        ForeignKey("artifact_versions.id", ondelete="CASCADE"), 
+        nullable=True,
+        unique=True,
+        index=True
+    )
+    license: Mapped[str] = mapped_column(String(64), nullable=False, default="unknown")
+    
+    # Rights permissions
+    allows_archival: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    allows_public_display: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    allows_internal_test: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    allows_modification: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    
+    # Assessment metadata
+    confidence: Mapped[str] = mapped_column(String(16), nullable=False, default="low")
+    needs_human_review: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    detected_files: Mapped[Optional[dict]] = mapped_column(JSON, nullable=True)
+    assessed_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, default=datetime.utcnow)
+
+    def __repr__(self) -> str:
+        return f"<LicenseAssessment(id={self.id!r}, license={self.license!r}, confidence={self.confidence!r})>"
