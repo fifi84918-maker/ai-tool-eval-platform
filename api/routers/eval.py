@@ -35,6 +35,46 @@ def get_db():
 router = APIRouter()
 
 
+def _skill_id_from_url(repo_url: str) -> str:
+    """Generate skill_id from repository URL.
+    
+    Rules:
+    - github.com/owner/repo → "github-owner-repo"
+    - Other URLs → domain-path slugified
+    
+    Args:
+        repo_url: Repository URL
+        
+    Returns:
+        Generated skill_id string
+        
+    Examples:
+        >>> _skill_id_from_url("https://github.com/acme/doc-skill")
+        'github-acme-doc-skill'
+        >>> _skill_id_from_url("https://gitlab.com/acme/project")
+        'gitlab-acme-project'
+    """
+    url = repo_url.lower().strip().rstrip('/')
+    
+    # Remove protocol
+    if url.startswith('https://'):
+        url = url[8:]
+    elif url.startswith('http://'):
+        url = url[7:]
+    
+    # Parse domain and path
+    parts = url.split('/')
+    if len(parts) < 2:
+        # Just domain, no path
+        return parts[0].replace('.', '-')
+    
+    domain = parts[0].split('.')[0]  # github.com → github
+    path_parts = parts[1:]
+    
+    # Join domain and path with hyphens
+    return '-'.join([domain] + path_parts)
+
+
 class EvalRequest(BaseModel):
     repo_url: str
 
@@ -45,6 +85,7 @@ class BatchEvalRequest(BaseModel):
 
 class EvalResponse(BaseModel):
     repo_url: str
+    skill_id: str  # Generated from repo_url for linking to skill detail page
     metrics: dict
     score_total: float
     grade: str
@@ -102,6 +143,7 @@ def _clone_and_scan(repo_url: str) -> dict:
         # Build response
         return {
             "repo_url": repo_url,
+            "skill_id": _skill_id_from_url(repo_url),
             "metrics": scan_result["metrics"],
             "score_total": score_result["total"],
             "grade": score_result["grade"],
@@ -337,8 +379,10 @@ async def evaluate_zip_upload(file: UploadFile = File(...), db: Session = Depend
         score_result = score_skill(scan_result["metrics"])
         
         # Build result
+        repo_url = f"uploaded:{file.filename}"
         result = EvalResponse(
-            repo_url=f"uploaded:{file.filename}",
+            repo_url=repo_url,
+            skill_id=_skill_id_from_url(repo_url),  # Generate skill_id for uploaded files too
             metrics=scan_result["metrics"],
             score_total=score_result["total"],
             grade=score_result["grade"],

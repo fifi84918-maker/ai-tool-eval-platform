@@ -7,6 +7,7 @@ import ScoreBar from '@/components/skill/ScoreBar'
 
 interface EvalResult {
   repo_url?: string
+  skill_id?: string  // Generated from repo_url for linking to detail page
   metrics: {
     accuracy: number
     reliability: number
@@ -26,6 +27,7 @@ interface EvalResult {
 
 interface BatchResult {
   repo_url: string
+  skill_id?: string
   score_total?: number
   grade?: string
   error?: string
@@ -295,16 +297,26 @@ export default function EvaluateRepoPage() {
               <h2 className="text-2xl font-bold text-[#1D2129]">评估结果</h2>
               <GradeBadge grade={result.grade} />
             </div>
-            {result.repo_url && (
-              <a
-                href={result.repo_url}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="text-[#165DFF] hover:text-[#4080FF] text-sm break-all"
-              >
-                {result.repo_url}
-              </a>
-            )}
+            <div className="flex items-center gap-4">
+              {result.repo_url && (
+                <a
+                  href={result.repo_url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-[#165DFF] hover:text-[#4080FF] text-sm break-all"
+                >
+                  {result.repo_url}
+                </a>
+              )}
+              {result.skill_id && (
+                <Link
+                  href={`/skills/${result.skill_id}`}
+                  className="text-sm text-[#165DFF] hover:text-[#4080FF] font-medium whitespace-nowrap"
+                >
+                  查看详情 →
+                </Link>
+              )}
+            </div>
           </div>
 
           <div className="mb-8 p-6 bg-[#F5F7FA] rounded-2xl">
