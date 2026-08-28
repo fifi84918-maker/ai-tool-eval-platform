@@ -110,7 +110,21 @@ def get_skill_detail(
         if "grade" not in scrubbed_detail["summary"]:
             scrubbed_detail["summary"]["grade"] = None
     
+    # V1A Task 29.4.3: Add extended fields with defaults
+    extended_fields = {
+        "evidence_grade_detail": scrubbed_detail.get("summary", {}).get("evidence_grade", "C"),
+        "applicable_scenarios": scrubbed_detail.get("applicable_scenarios", []),
+        "not_applicable_scenarios": scrubbed_detail.get("not_applicable_scenarios", []),
+        "compatibility_status": scrubbed_detail.get("compatibility_status", "Unverified"),
+        "compatibility_notes": scrubbed_detail.get("compatibility_notes", ""),
+        "static_findings": scrubbed_detail.get("static_findings", []),
+        "failure_cases": scrubbed_detail.get("failure_cases", []),
+        "test_env": scrubbed_detail.get("test_env", None),
+        "source_platforms": scrubbed_detail.get("source_platforms", [scrubbed_detail.get("summary", {}).get("source_kind", "")]),
+    }
+    
     return {
         **scrubbed_detail,
         "json_ld": json_ld,
+        **extended_fields,
     }

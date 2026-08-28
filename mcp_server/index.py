@@ -72,6 +72,36 @@ def _build_entry(sample: TrialSample) -> _IndexEntry:
         "S5-secrets": ("security",),  # leaky-skill with secrets
     }
     category_tags = category_mapping.get(sample.sample_id, ())
+    
+    # V1A Task 29.4.3: Extended fields with sample-specific values
+    applicable_scenarios_map = {
+        "S1-green": ("documentation generation", "format organization"),
+        "S2-no-skillmd": ("loose repository testing",),
+        "S3-highrisk-perms": ("file cleanup", "batch processing"),
+        "S4-d008-rights": ("development tools",),
+        "S5-secrets": ("security auditing",),
+    }
+    not_applicable_scenarios_map = {
+        "S1-green": ("code development", "data processing"),
+        "S3-highrisk-perms": ("production deployment",),
+        "S5-secrets": ("untrusted environments",),
+    }
+    static_findings_map = {
+        "S3-highrisk-perms": (
+            {"dimension": "permissions", "level": "warning", "message": "High-risk permissions declared"},
+        ),
+        "S5-secrets": (
+            {"dimension": "security", "level": "block", "message": "Hardcoded secrets detected"},
+        ),
+    }
+    failure_cases_map = {
+        "S3-highrisk-perms": ("Permission denied in restricted environments",),
+        "S5-secrets": ("Secrets leaked in logs", "Failed security scan"),
+    }
+    test_env_map = {
+        "S1-green": {"model": "test-model-v1", "host": "local", "os": "Linux"},
+        "S5-secrets": {"model": "test-model-v1", "host": "sandbox", "os": "Linux"},
+    }
 
     summary = SkillSummary(
         skill_id=report.skill_id,
@@ -96,6 +126,15 @@ def _build_entry(sample: TrialSample) -> _IndexEntry:
         else None,
         admission_reasons=tuple(report.admission.reasons) if report.admission else (),
         warnings=tuple(report.warnings),
+        # V1A Task 29.4.3: Extended fields
+        applicable_scenarios=applicable_scenarios_map.get(sample.sample_id, ()),
+        not_applicable_scenarios=not_applicable_scenarios_map.get(sample.sample_id, ()),
+        compatibility_status="Unverified",
+        compatibility_notes="",
+        static_findings=static_findings_map.get(sample.sample_id, ()),
+        failure_cases=failure_cases_map.get(sample.sample_id, ()),
+        test_env=test_env_map.get(sample.sample_id),
+        source_platforms=(sample.source_kind.value,),
     )
     # ArtifactRef 直接从采集适配器投影（占位哈希，无内容）
     from collector.source import adapter_for

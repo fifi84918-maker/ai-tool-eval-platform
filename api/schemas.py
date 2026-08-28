@@ -30,6 +30,17 @@ class SkillDetailOut(BaseModel):
     admission_reasons: list[str]
     warnings: list[str]
     json_ld: dict[str, Any] | None = Field(None, description="JSON-LD structured card")
+    
+    # V1A Task 29.4.3: PRD 19.3 extended fields
+    evidence_grade_detail: str | None = Field(None, description="Evidence grade with detail (C/D/U)")
+    applicable_scenarios: list[str] = Field(default_factory=list, description="Applicable use cases")
+    not_applicable_scenarios: list[str] = Field(default_factory=list, description="Not applicable scenarios")
+    compatibility_status: str | None = Field(None, description="Platform compatibility status")
+    compatibility_notes: str | None = Field(None, description="Compatibility details")
+    static_findings: list[dict[str, str]] = Field(default_factory=list, description="Static check findings")
+    failure_cases: list[str] = Field(default_factory=list, description="Known failure cases")
+    test_env: dict[str, str] | None = Field(None, description="Test environment info")
+    source_platforms: list[str] = Field(default_factory=list, description="Source platforms")
 
 
 class ArtifactRefOut(BaseModel):

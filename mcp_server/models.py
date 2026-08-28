@@ -26,6 +26,15 @@ class SkillDetail(TypedDict):
     static_summary: dict[str, int] | None      # 静态检测结论计数（无 finding 正文）
     admission_reasons: tuple[str, ...]
     warnings: tuple[str, ...]
+    # V1A Task 29.4.3: Extended fields for PRD 19.3
+    applicable_scenarios: tuple[str, ...]
+    not_applicable_scenarios: tuple[str, ...]
+    compatibility_status: str
+    compatibility_notes: str
+    static_findings: tuple[dict[str, str], ...]
+    failure_cases: tuple[str, ...]
+    test_env: dict[str, str] | None
+    source_platforms: tuple[str, ...]
 
 
 class ArtifactRefDTO(TypedDict):
