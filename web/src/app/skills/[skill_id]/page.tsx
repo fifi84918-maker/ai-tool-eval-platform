@@ -20,7 +20,26 @@ interface SkillDetail {
   author: string | null
   license_spdx: string | null
   warnings: string[]
+  declared_permissions: string[]
   json_ld: any | null
+  // V1A Task 29.4.3: PRD 19.3 extended fields
+  evidence_grade_detail?: string
+  applicable_scenarios?: string[]
+  not_applicable_scenarios?: string[]
+  compatibility_status?: string
+  compatibility_notes?: string
+  static_findings?: Array<{
+    dimension: string
+    level: string
+    message: string
+  }>
+  failure_cases?: string[]
+  test_env?: {
+    model?: string
+    host?: string
+    os?: string
+  }
+  source_platforms?: string[]
   // Future: dimension scores when available
   metrics?: {
     accuracy?: number
@@ -352,6 +371,159 @@ export default function SkillDetailPage({
                 </li>
               ))}
             </ul>
+          </div>
+        )}
+
+        {/* V1A Task 29.4.3: PRD 19.3 Extended Fields */}
+        
+        {/* A. Evidence Grade + Test Environment */}
+        {skill.evidence_grade_detail && (
+          <div className="mt-8">
+            <h3 className="text-lg font-semibold text-[#1D2129] mb-4">证据等级</h3>
+            <div className="flex items-center gap-4 flex-wrap">
+              <span className={`px-4 py-2 text-sm font-medium rounded-full ${
+                skill.evidence_grade_detail === 'A' ? 'bg-[#22c55e] text-white' :
+                skill.evidence_grade_detail === 'B' ? 'bg-[#3b82f6] text-white' :
+                skill.evidence_grade_detail === 'C' ? 'bg-[#eab308] text-white' :
+                skill.evidence_grade_detail === 'D' ? 'bg-[#6b7280] text-white' :
+                skill.evidence_grade_detail === 'U' ? 'bg-[#ef4444] text-white' :
+                'bg-[#86909C] text-white'
+              }`}>
+                Grade {skill.evidence_grade_detail}
+              </span>
+              {skill.test_env && (
+                <div className="text-sm text-[#4E5969]">
+                  {skill.test_env.model && <span className="mr-3">Model: {skill.test_env.model}</span>}
+                  {skill.test_env.host && <span className="mr-3">Host: {skill.test_env.host}</span>}
+                  {skill.test_env.os && <span>OS: {skill.test_env.os}</span>}
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* B. Applicable / Not Applicable Scenarios */}
+        {((skill.applicable_scenarios && skill.applicable_scenarios.length > 0) || 
+          (skill.not_applicable_scenarios && skill.not_applicable_scenarios.length > 0)) && (
+          <div className="mt-8">
+            <h3 className="text-lg font-semibold text-[#1D2129] mb-4">适用场景</h3>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              {skill.applicable_scenarios && skill.applicable_scenarios.length > 0 && (
+                <div>
+                  <h4 className="text-sm font-medium text-[#00B42A] mb-3">✓ 适用于</h4>
+                  <ul className="space-y-2">
+                    {skill.applicable_scenarios.map((scenario, idx) => (
+                      <li key={idx} className="flex items-start gap-2 text-sm text-[#1D2129]">
+                        <span className="text-[#00B42A] mt-0.5">✓</span>
+                        <span>{scenario}</span>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+              {skill.not_applicable_scenarios && skill.not_applicable_scenarios.length > 0 && (
+                <div>
+                  <h4 className="text-sm font-medium text-[#F53F3F] mb-3">✗ 不适用于</h4>
+                  <ul className="space-y-2">
+                    {skill.not_applicable_scenarios.map((scenario, idx) => (
+                      <li key={idx} className="flex items-start gap-2 text-sm text-[#1D2129]">
+                        <span className="text-[#F53F3F] mt-0.5">✗</span>
+                        <span>{scenario}</span>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* C. Platform Compatibility */}
+        {skill.compatibility_status && (
+          <div className="mt-8">
+            <h3 className="text-lg font-semibold text-[#1D2129] mb-4">平台兼容性</h3>
+            <div>
+              <span className={`inline-block px-4 py-2 text-sm font-medium rounded-full ${
+                skill.compatibility_status === 'Native' ? 'bg-[#00B42A] text-white' :
+                skill.compatibility_status === 'Compatible' ? 'bg-[#3b82f6] text-white' :
+                skill.compatibility_status === 'Adaptable' ? 'bg-[#eab308] text-white' :
+                skill.compatibility_status === 'Partial' ? 'bg-[#FF7D00] text-white' :
+                skill.compatibility_status === 'Blocked' ? 'bg-[#F53F3F] text-white' :
+                'bg-[#86909C] text-white'
+              }`}>
+                {skill.compatibility_status}
+              </span>
+              {skill.compatibility_notes && (
+                <p className="mt-3 text-sm text-[#4E5969]">{skill.compatibility_notes}</p>
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* D. Static Check Findings */}
+        <div className="mt-8">
+          <h3 className="text-lg font-semibold text-[#1D2129] mb-4">静态检测结果</h3>
+          {skill.static_findings && skill.static_findings.length > 0 ? (
+            <div className="space-y-3">
+              {skill.static_findings.map((finding, idx) => (
+                <div key={idx} className="flex items-start gap-4 p-4 bg-[#F5F7FA] rounded-xl">
+                  <div className="flex-1">
+                    <div className="flex items-center gap-3 mb-1">
+                      <span className="text-sm font-medium text-[#1D2129]">{finding.dimension}</span>
+                      <span className={`px-2 py-0.5 text-xs font-medium rounded ${
+                        finding.level === 'pass' ? 'bg-[#00B42A] text-white' :
+                        finding.level === 'warning' ? 'bg-[#FF7D00] text-white' :
+                        finding.level === 'block' ? 'bg-[#F53F3F] text-white' :
+                        'bg-[#86909C] text-white'
+                      }`}>
+                        {finding.level.toUpperCase()}
+                      </span>
+                    </div>
+                    <p className="text-sm text-[#4E5969]">{finding.message}</p>
+                  </div>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <p className="text-sm text-[#86909C]">暂无静态检测结果</p>
+          )}
+        </div>
+
+        {/* E. Failure Cases */}
+        {skill.failure_cases && skill.failure_cases.length > 0 && (
+          <div className="mt-8">
+            <details className="group">
+              <summary className="cursor-pointer list-none">
+                <div className="flex items-center justify-between p-4 bg-[#F5F7FA] rounded-xl hover:bg-[#E5E6EB] transition-colors">
+                  <h3 className="text-lg font-semibold text-[#1D2129]">已知失败案例 ({skill.failure_cases.length})</h3>
+                  <svg className="w-5 h-5 text-[#4E5969] group-open:rotate-180 transition-transform" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                  </svg>
+                </div>
+              </summary>
+              <div className="mt-3 space-y-2">
+                {skill.failure_cases.map((failureCase, idx) => (
+                  <div key={idx} className="flex items-start gap-2 p-3 bg-[#F53F3F]/5 border border-[#F53F3F]/20 rounded-lg">
+                    <span className="text-[#F53F3F] mt-0.5">•</span>
+                    <p className="text-sm text-[#1D2129] flex-1">{failureCase}</p>
+                  </div>
+                ))}
+              </div>
+            </details>
+          </div>
+        )}
+
+        {/* F. Source Platforms (at bottom of main card) */}
+        {skill.source_platforms && skill.source_platforms.length > 0 && (
+          <div className="mt-8 pt-6 border-t border-[#E5E6EB]">
+            <h4 className="text-sm font-medium text-[#4E5969] mb-3">来源平台</h4>
+            <div className="flex flex-wrap gap-2">
+              {skill.source_platforms.map((platform, idx) => (
+                <span key={idx} className="px-3 py-1 text-xs font-medium bg-[#86909C]/10 text-[#86909C] rounded-full">
+                  {platform}
+                </span>
+              ))}
+            </div>
           </div>
         )}
       </div>
