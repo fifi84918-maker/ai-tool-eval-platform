@@ -1,6 +1,8 @@
-"""Recommendation generation API endpoints (V1A Task 29.4.6)."""
+"""Recommendation generation API endpoints (V1A Task 29.4.6/29.4.7)."""
 
+from datetime import datetime, timezone
 from fastapi import APIRouter, HTTPException
+from pydantic import BaseModel
 
 from api.schemas import (
     ProjectProfileCreate,
@@ -15,6 +17,17 @@ from api.routers.profiles import _profiles
 from api.routers.skills import get_skill_by_id
 
 router = APIRouter(prefix="/api/v1/recommend", tags=["recommendation"])
+
+
+# V1A Task 29.4.7: Recommendation history storage (in-memory, max 20 entries)
+_history: list[dict] = []
+MAX_HISTORY = 20
+
+
+class HistoryResponse(BaseModel):
+    """推荐历史响应。"""
+    total: int
+    items: list[dict]
 
 
 def generate_recommendations(
@@ -134,7 +147,16 @@ def recommend_inline(profile: ProjectProfileCreate):
     Accepts a project profile directly in the request body and returns
     recommendations without storing the profile.
     """
-    return generate_recommendations(profile, profile_id=None, profile_name=None)
+    response = generate_recommendations(profile, profile_id=None, profile_name=None)
+    
+    # V1A Task 29.4.7: Record to history
+    _record_history(
+        profile_id=None,
+        profile_name=profile.name,
+        response=response,
+    )
+    
+    return response
 
 
 @router.post("/{profile_id}", response_model=RecommendationResponse, responses={404: {"model": ErrorOut}})
@@ -148,8 +170,56 @@ def recommend_by_profile_id(profile_id: str):
     if profile is None:
         raise HTTPException(status_code=404, detail="Profile not found")
     
-    return generate_recommendations(
+    response = generate_recommendations(
         profile,
         profile_id=profile.id,
         profile_name=profile.name,
     )
+    
+    # V1A Task 29.4.7: Record to history
+    _record_history(
+        profile_id=profile.id,
+        profile_name=profile.name,
+        response=response,
+    )
+    
+    return response
+
+
+def _record_history(profile_id: str | None, profile_name: str, response: RecommendationResponse):
+    """Record a recommendation to history (internal helper)."""
+    global _history
+    
+    # Create history entry
+    entry = {
+        "profile_id": profile_id,
+        "profile_name": profile_name,
+        "timestamp": datetime.now(timezone.utc).isoformat(),
+        "response": response.model_dump(),
+    }
+    
+    # Append and trim to max size
+    _history.append(entry)
+    if len(_history) > MAX_HISTORY:
+        _history.pop(0)
+
+
+@router.get("/history", response_model=HistoryResponse)
+def get_recommendation_history():
+    """Get all recommendation history (most recent 20 entries)."""
+    return HistoryResponse(total=len(_history), items=_history)
+
+
+@router.get("/history/{profile_id}", response_model=HistoryResponse, responses={404: {"model": ErrorOut}})
+def get_recommendation_history_by_profile(profile_id: str):
+    """Get recommendation history for a specific profile.
+    
+    Returns all history entries for the given profile_id.
+    Returns 404 if no history exists for this profile.
+    """
+    matching = [entry for entry in _history if entry["profile_id"] == profile_id]
+    
+    if not matching:
+        raise HTTPException(status_code=404, detail="No recommendation history for profile")
+    
+    return HistoryResponse(total=len(matching), items=matching)
