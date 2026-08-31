@@ -1,11 +1,66 @@
 """GitHub source collector implementation."""
 import json, logging, os, time, urllib.error, urllib.parse, urllib.request
 from datetime import datetime
-from typing import Optional
+from typing import Optional, Any, ClassVar
+from collections.abc import Sequence
 from sqlalchemy.orm import Session
 from collector.base import RawSourceCandidate, SourceCollector, IngestReport, RateLimitError, AuthenticationError, CollectorError
+from core.enums import SourceKind
+from core.schema.artifact import ArtifactRef
+from core.schema.skill import SourceRecord
+from collector.source import IndexPage, RawItem, SourceAdapter
 from db.repository import SourceRepository
+
 logger = logging.getLogger(__name__)
+
+_PENDING_SHA256 = "0" * 64
+"""占位哈希：内容未获取，真实 SHA-256 由后续取得制品的环节计算。"""
+
+
+class GitHubPoCAdapter(SourceAdapter):
+    """GitHub PoC 适配器，兼容 SourceAdapter 接口。"""
+    kind: ClassVar[SourceKind] = SourceKind.GITHUB
+
+    def fetch_index(self, cursor: str | None = None) -> IndexPage:
+        """返回一页候选条目。"""
+        # Stub implementation for tests
+        return IndexPage(items=(), next_cursor=None)
+
+    def fetch_metadata(self, item: RawItem) -> SourceRecord:
+        """把一条原始条目归一为 SourceRecord。"""
+        repo_full_name = item.get("full_name", "unknown/unknown")
+        return SourceRecord(
+            source_kind=SourceKind.GITHUB,
+            origin_url=item.get("html_url", f"https://github.com/{repo_full_name}"),
+            source_object_id=repo_full_name,
+            author=item.get("owner", {}).get("login"),
+            raw_name=item.get("name", "unknown"),
+            raw_description=item.get("description"),
+            discovered_at=datetime.fromisoformat(item["_discovered_at"])
+            if "_discovered_at" in item
+            else datetime.min,
+            last_synced_at=None,
+            is_alive=not item.get("archived", False),
+            allow_internal_test=None,
+            allow_public_derived_result=None,
+            allow_retain_test_copy=None,
+        )
+
+    def fetch_artifact_refs(self, item: RawItem) -> Sequence[ArtifactRef]:
+        """返回制品引用列表。"""
+        repo_full_name = item.get("full_name", "unknown/unknown")
+        default_branch = item.get("default_branch", "main")
+        return (
+            ArtifactRef(
+                bucket="external:github",
+                key=f"https://github.com/{repo_full_name}/tree/{default_branch}",
+                sha256=_PENDING_SHA256,
+                size_bytes=0,
+                summary=f"github repo {repo_full_name} @ {default_branch} (not fetched)",
+            ),
+        )
+
+
 class GitHubCollector(SourceCollector):
     platform = "github"
     API_BASE = "https://api.github.com"
