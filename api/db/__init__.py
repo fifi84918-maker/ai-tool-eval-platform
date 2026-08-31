@@ -14,6 +14,7 @@ from api.db.search_cache_store import (
     clear_search_cache,
 )
 from api.db.score_store import upsert_score, get_score, list_scores
+from api.db.compat_store import upsert_compat, get_compat
 
 __all__ = [
     "get_conn", "close_conn", "init_db",
@@ -23,5 +24,6 @@ __all__ = [
     "clear_all_aux",
     "make_cache_key", "get_cached", "set_cached", "clear_search_cache",
     "upsert_score", "get_score", "list_scores",
+    "upsert_compat", "get_compat",
 ]
 

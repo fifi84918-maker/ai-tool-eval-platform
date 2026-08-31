@@ -218,6 +218,10 @@ def _ensure_columns(conn: sqlite3.Connection) -> None:
     _add_column_if_missing(conn, "skills", "evidence_level",  "TEXT")
     _add_column_if_missing(conn, "skills", "sample_size",
                            "INTEGER NOT NULL DEFAULT 0")
+    # V1G: compatibility judgment
+    _add_column_if_missing(conn, "skills", "compat_status",
+                           "TEXT NOT NULL DEFAULT 'UNKNOWN'")
+    _add_column_if_missing(conn, "skills", "compat_details_json", "TEXT")
 
 
 def _add_column_if_missing(

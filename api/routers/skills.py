@@ -270,3 +270,86 @@ def get_skill_scores(skill_id: str):
         valid_until=stored.get("valid_until"),
     )
 
+
+# ---------------------------------------------------------------------------
+# Compat response model
+# ---------------------------------------------------------------------------
+
+class CompatEvidenceOut(BaseModel):
+    has_load_evidence: bool = False
+    source: str = "static_only"
+
+
+class HostOverlayOut(BaseModel):
+    missing_items:   list[str] = Field(default_factory=list)
+    present_items:   list[str] = Field(default_factory=list)
+    adaptation_cost: str = "low"
+
+
+class CompatResultOut(BaseModel):
+    """GET /api/v1/skills/{id}/compat response (PRD §6.3)."""
+    skill_id:        str
+    compat_status:   str
+    portable_core:   dict = Field(default_factory=dict)
+    host_overlay:    HostOverlayOut = Field(default_factory=HostOverlayOut)
+    evidence:        CompatEvidenceOut = Field(default_factory=CompatEvidenceOut)
+    recommendations: list[str] = Field(default_factory=list)
+
+
+@router.get("/{skill_id}/compat", response_model=CompatResultOut,
+            responses={404: {"model": ErrorOut}})
+def get_skill_compat(skill_id: str):
+    """Get compatibility analysis for a skill (PRD §6.3).
+
+    Returns stored CompatResult if present.
+    Falls back to on-demand static analysis if no stored record.
+    """
+    from api.db.compat_store import get_compat
+    from api.store.skill_store import get_skill
+
+    # Try stored record first
+    stored = get_compat(skill_id)
+
+    if stored is None:
+        # On-demand analysis for skills not yet processed by the pipeline
+        skill_obj = get_skill(skill_id)
+        if skill_obj is None:
+            raise HTTPException(status_code=404, detail=f"Skill not found: {skill_id}")
+
+        from api.scoring.compat import CompatAnalyzer
+        compat_result = CompatAnalyzer().analyze(
+            {"skill_id": skill_id, "skill_md": "", "artifacts": []},
+        )
+        return CompatResultOut(
+            skill_id=skill_id,
+            compat_status=compat_result.compat_status,
+            portable_core=compat_result.portable_core.to_dict(),
+            host_overlay=HostOverlayOut(
+                missing_items=compat_result.host_overlay.missing_items,
+                present_items=compat_result.host_overlay.present_items,
+                adaptation_cost=compat_result.host_overlay.adaptation_cost,
+            ),
+            evidence=CompatEvidenceOut(**compat_result.evidence.to_dict()),
+            recommendations=compat_result.recommendations,
+        )
+
+    overlay_raw = stored.get("host_overlay", {}) or {}
+    evidence_raw = stored.get("evidence", {}) or {}
+
+    return CompatResultOut(
+        skill_id=skill_id,
+        compat_status=stored.get("compat_status", "UNKNOWN"),
+        portable_core=stored.get("portable_core", {}),
+        host_overlay=HostOverlayOut(
+            missing_items=overlay_raw.get("missing_items", []),
+            present_items=overlay_raw.get("present_items", []),
+            adaptation_cost=overlay_raw.get("adaptation_cost", "low"),
+        ),
+        evidence=CompatEvidenceOut(
+            has_load_evidence=evidence_raw.get("has_load_evidence", False),
+            source=evidence_raw.get("source", "static_only"),
+        ),
+        recommendations=stored.get("recommendations", []),
+    )
+
+

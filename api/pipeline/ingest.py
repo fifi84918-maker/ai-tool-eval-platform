@@ -111,8 +111,9 @@ def run_pipeline(query: str, limit: int = 5, fetcher=None) -> dict:
             if static_verdict == "QUARANTINE":
                 report["quarantined"] += 1
                 skill = get_skill(skill_id)
-                # V1F: score quarantined skill (low scores, evidence C)
+                # V1F/V1G: score + compat for quarantined skill
                 _run_skill_scorer(skill_id, skill, static_result, None, artifacts)
+                _run_compat_analysis(skill_id, static_result, None, artifacts)
                 report["skills"].append({
                     "skill_id":      skill_id,
                     "name":          skill.name if skill else skill_id,
@@ -127,8 +128,9 @@ def run_pipeline(query: str, limit: int = 5, fetcher=None) -> dict:
             if static_verdict == "METADATA_ONLY":
                 report["metadata_only"] += 1
                 skill = get_skill(skill_id)
-                # V1F: score metadata-only skill (evidence D)
+                # V1F/V1G: score + compat for metadata-only skill
                 _run_skill_scorer(skill_id, skill, static_result, None, artifacts)
+                _run_compat_analysis(skill_id, static_result, None, artifacts)
                 report["skills"].append({
                     "skill_id":      skill_id,
                     "name":          skill.name if skill else skill_id,
@@ -175,6 +177,9 @@ def run_pipeline(query: str, limit: int = 5, fetcher=None) -> dict:
 
             # ── Stage 6: V1F 8-dimension scoring ─────────────────────────────
             _run_skill_scorer(skill_id, skill, static_result, dynamic_result, artifacts)
+
+            # ── Stage 7: V1G Compatibility analysis ──────────────────────────
+            _run_compat_analysis(skill_id, static_result, dynamic_result, artifacts)
 
             report["skills"].append({
                 "skill_id":      skill_id,
@@ -305,3 +310,35 @@ def _run_skill_scorer(
         )
     except Exception as exc:
         logger.warning("v1f scoring failed for %s: %s", skill_id, exc)
+
+
+def _run_compat_analysis(
+    skill_id: str,
+    static_result,
+    dynamic_result,
+    artifacts,
+) -> None:
+    """V1G: run CompatAnalyzer and persist result to DB."""
+    try:
+        from api.scoring.compat import CompatAnalyzer
+        from api.db.compat_store import upsert_compat
+
+        skill_md = _collect_skill_md(artifacts)
+        artifact_dicts = _artifacts_to_dicts(artifacts)
+
+        compat_result = CompatAnalyzer().analyze(
+            {
+                "skill_id":   skill_id,
+                "skill_md":   skill_md,
+                "artifacts":  artifact_dicts,
+            },
+            static_result=static_result,
+            dynamic_result=dynamic_result,
+        )
+        upsert_compat(compat_result)
+        logger.info(
+            "v1g compat skill=%s status=%s",
+            skill_id[:12], compat_result.compat_status,
+        )
+    except Exception as exc:
+        logger.warning("v1g compat failed for %s: %s", skill_id, exc)
