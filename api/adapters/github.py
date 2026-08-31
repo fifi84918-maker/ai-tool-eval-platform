@@ -80,7 +80,7 @@ class GitHubAdapter:
         return self._item_cache.get(repo_full_name)
     
     def discover(self, query: str, limit: int = 20) -> list[SourceRecord]:
-        """发现候选技能（仅元数据）。
+        """发现候选技能（创建 DISCOVERED 状态的 CanonicalSkill）。
         
         Args:
             query: 搜索关键词
@@ -89,6 +89,8 @@ class GitHubAdapter:
         Returns:
             SourceRecord 列表（去重后）
         """
+        from api.store import put_skill
+        
         results = self.fetcher.search(query, limit)
         
         sources = []
@@ -99,7 +101,10 @@ class GitHubAdapter:
             if is_duplicate(self.platform, repo_full_name):
                 continue
             
-            # 构造 SourceRecord（保存完整 item 用于后续 fetch）
+            # Store raw item data for fetch() to use
+            self._cache_item(repo_full_name, item)
+            
+            # 构造 SourceRecord
             source = SourceRecord(
                 source_id=str(uuid.uuid4()),
                 platform=self.platform,
@@ -107,16 +112,44 @@ class GitHubAdapter:
                 fetched_at=datetime.now(timezone.utc),
                 raw_url=item["html_url"],
                 dedupe_hash=compute_dedupe_hash(self.platform, repo_full_name),
-                canonical_skill_id=None  # 尚未关联
+                canonical_skill_id=None  # 将在下面回填
             )
-            # Store raw item data for fetch() to use
-            self._cache_item(repo_full_name, item)
+            
+            # 计算 skill_id
+            skill_id = hashlib.sha256(f"github:{repo_full_name}".encode()).hexdigest()
+            
+            # 创建 DISCOVERED 状态的 CanonicalSkill
+            skill = CanonicalSkill(
+                skill_id=skill_id,
+                name=item.get("name", repo_full_name.split("/")[-1]),
+                description=item.get("description", ""),
+                platform=self.platform,
+                platform_skill_id=repo_full_name,
+                state="DISCOVERED",
+                source_refs=[source.source_id],
+                created_at=datetime.now(timezone.utc),
+                updated_at=datetime.now(timezone.utc),
+                # 默认值
+                target_domains=[],
+                required_languages=[],
+                security_level="lax",
+                high_risk=False,
+                state_history=[],
+                artifact_refs=[],
+            )
+            
+            # 存储 skill
+            put_skill(skill)
+            
+            # 回填 source 的 canonical_skill_id
+            source.canonical_skill_id = skill_id
+            
             sources.append(source)
         
         return sources
     
     def fetch(self, source: SourceRecord) -> tuple[CanonicalSkill, list[ArtifactRecord]]:
-        """获取完整技能内容并构造规范化模型。
+        """获取完整技能内容，从 DISCOVERED 转换到 ACQUIRED。
         
         Args:
             source: 源记录
@@ -124,40 +157,44 @@ class GitHubAdapter:
         Returns:
             (CanonicalSkill, ArtifactRecord 列表)
         """
+        from api.store import get_skill, put_skill, put_artifact, transition_state
+        
         repo_full_name = source.platform_skill_id
         
-        # 获取缓存的原始数据（用于提取 license/topics/description）
-        cached_item = self._get_cached_item(repo_full_name)
+        # 1. 计算 skill_id
+        skill_id = self._compute_skill_id(repo_full_name)
         
-        # 获取 SKILL.md
+        # 2. 从 store 取已有的 DISCOVERED skill
+        skill = get_skill(skill_id)
+        if skill is None:
+            raise ValueError(f"Skill {skill_id} not found. Call discover() first.")
+        if skill.state != "DISCOVERED":
+            raise ValueError(f"Skill {skill_id} is in state {skill.state}, expected DISCOVERED")
+        
+        # 3. 获取 SKILL.md
         skill_md_content = self.fetcher.get_skill_md(repo_full_name)
         if skill_md_content is None:
             skill_md_content = ""
         
-        # 解析 SKILL.md 和原始数据
+        # 4. 解析 SKILL.md（获取更完整的信息）
+        cached_item = self._get_cached_item(repo_full_name)
         metadata = self._parse_skill_md(skill_md_content, cached_item)
         
-        # 构造 CanonicalSkill
-        skill_id = self._compute_skill_id(repo_full_name)
+        # 5. 更新 skill 字段（用解析后的更完整信息）
+        skill.name = metadata["name"]
+        skill.description = metadata["description"]
+        skill.license = metadata["license"]
+        skill.target_domains = metadata["target_domains"]
+        skill.required_languages = metadata["required_languages"]
+        put_skill(skill)
         
-        skill = CanonicalSkill(
-            skill_id=skill_id,
-            name=metadata["name"],
-            description=metadata["description"],
-            platform=self.platform,
-            platform_skill_id=repo_full_name,
-            license=metadata["license"],
-            security_level="lax",  # 默认 lax，静态检测再定级
-            high_risk=False,
-            target_domains=metadata["target_domains"],
-            required_languages=metadata["required_languages"],
-            state="ACQUIRED",  # DISCOVERED → ACQUIRED
-            created_at=datetime.now(timezone.utc),
-            updated_at=datetime.now(timezone.utc),
-            source_refs=[source.source_id],
-        )
+        # 6. transition 到 ACQUIRED
+        transition_state(skill_id, "ACQUIRED", reason=f"Fetched SKILL.md from GitHub: {repo_full_name}")
         
-        # 构造 ArtifactRecord
+        # 7. 刷新 skill（获取更新后的状态）
+        skill = get_skill(skill_id)
+        
+        # 8. 构造 ArtifactRecord
         artifact = ArtifactRecord(
             artifact_id=str(uuid.uuid4()),
             skill_id=skill_id,
@@ -165,6 +202,11 @@ class GitHubAdapter:
             path_or_text=skill_md_content,
             created_at=datetime.now(timezone.utc)
         )
+        put_artifact(artifact)
+        
+        # 9. 更新 skill 的 artifact_refs
+        skill.artifact_refs.append(artifact.artifact_id)
+        put_skill(skill)
         
         return (skill, [artifact])
     

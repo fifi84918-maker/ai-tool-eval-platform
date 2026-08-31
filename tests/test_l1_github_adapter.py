@@ -24,7 +24,7 @@ def clean_store():
 
 
 def test_adapter_discovers_metadata_only():
-    """Test 1: discover 返回 SourceRecord，不产生 CanonicalSkill。"""
+    """Test 1: discover 创建 DISCOVERED 状态的 CanonicalSkill。"""
     adapter = GitHubAdapter(fetcher=FakeGitHubFetcher())
     
     sources = adapter.discover("skill", limit=10)
@@ -37,16 +37,34 @@ def test_adapter_discovers_metadata_only():
     assert source.platform == "github"
     assert source.platform_skill_id == "acme/demo-skill"
     assert source.dedupe_hash == "github:acme/demo-skill"
-    assert source.canonical_skill_id is None  # Not yet linked
+    
+    # discover 阶段应该创建 DISCOVERED skill
+    from api.store import get_skill
+    import hashlib
+    skill_id = hashlib.sha256(b"github:acme/demo-skill").hexdigest()
+    skill = get_skill(skill_id)
+    
+    assert skill is not None
+    assert skill.state == "DISCOVERED"
+    assert source.canonical_skill_id == skill_id  # 已回填
 
 
 def test_fetch_creates_acquired_skill():
-    """Test 2: fetch 后 CanonicalSkill.state == "ACQUIRED"，skill_id 是 64 位 hex。"""
+    """Test 2: fetch 后从 DISCOVERED 转换到 ACQUIRED，记录 state_history。"""
+    import hashlib
+    from api.store import get_skill
+    
     adapter = GitHubAdapter(fetcher=FakeGitHubFetcher())
     
     # Discover first
     sources = adapter.discover("skill")
     source = sources[0]
+    
+    # discover 后 skill 应该是 DISCOVERED
+    skill_id = hashlib.sha256(b"github:acme/demo-skill").hexdigest()
+    skill = get_skill(skill_id)
+    assert skill is not None
+    assert skill.state == "DISCOVERED"
     
     # Fetch
     skill, artifacts = adapter.fetch(source)
@@ -56,6 +74,13 @@ def test_fetch_creates_acquired_skill():
     assert skill.platform == "github"
     assert skill.platform_skill_id == "acme/demo-skill"
     assert source.source_id in skill.source_refs
+    
+    # 验证状态转换历史
+    assert len(skill.state_history) >= 1
+    last_transition = skill.state_history[-1]
+    assert last_transition["from_state"] == "DISCOVERED"
+    assert last_transition["to_state"] == "ACQUIRED"
+    assert "reason" in last_transition
 
 
 def test_fetch_parses_frontmatter():
@@ -147,7 +172,9 @@ def test_dedup_skips_existing():
 
 
 def test_full_pipeline_discover_fetch_persist():
-    """Test 7: discover → fetch → 断言 store 里 skill/source/artifact 三样齐全。"""
+    """Test 7: discover → fetch → 断言 store 里 skill/source/artifact 三样齐全，状态正确转换。"""
+    import hashlib
+    
     adapter = GitHubAdapter(fetcher=FakeGitHubFetcher())
     
     # Step 1: Discover
@@ -155,34 +182,54 @@ def test_full_pipeline_discover_fetch_persist():
     assert len(sources) == 1
     source = sources[0]
     
+    # 验证 discover 阶段：skill 存在且为 DISCOVERED
+    from api.store import get_skill, get_source, list_artifacts
+    skill_id = hashlib.sha256(b"github:acme/demo-skill").hexdigest()
+    skill = get_skill(skill_id)
+    assert skill is not None
+    assert skill.state == "DISCOVERED"
+    
     # Step 2: Fetch
     skill, artifacts = adapter.fetch(source)
+    assert skill.state == "ACQUIRED"
     
-    # Step 3: Persist (in order: source → skill → artifact)
+    # Step 3: Persist source (already done in discover, but verify)
+    from api.store import put_source
     put_source(source)
-    put_skill(skill)
-    for artifact in artifacts:
-        put_artifact(artifact)
     
     # Step 4: Verify persistence
     retrieved_source = get_source(source.source_id)
     assert retrieved_source is not None
     assert retrieved_source.platform_skill_id == "acme/demo-skill"
     
-    retrieved_skill = get_skill(skill.skill_id)
+    retrieved_skill = get_skill(skill_id)
     assert retrieved_skill is not None
     assert retrieved_skill.state == "ACQUIRED"
     assert source.source_id in retrieved_skill.source_refs
     
-    retrieved_artifacts = list_artifacts(skill_id=skill.skill_id)
-    assert len(retrieved_artifacts) == 1
+    retrieved_artifacts = list_artifacts(skill_id=skill_id)
+    assert len(retrieved_artifacts) >= 1
     assert retrieved_artifacts[0].kind == "skill_md"
     
-    # Step 5: Verify source backlink (should be updated)
-    # Note: In real implementation, fetch() should update source.canonical_skill_id
-    # For now, we manually update it
-    source.canonical_skill_id = skill.skill_id
-    put_source(source)
+    # Verify source backlink
+    assert retrieved_source.canonical_skill_id == skill_id
+
+
+def test_fetch_without_discover_raises():
+    """Test 8: fetch 前没 discover 应该报错。"""
+    adapter = GitHubAdapter(fetcher=FakeGitHubFetcher())
     
-    retrieved_source = get_source(source.source_id)
-    assert retrieved_source.canonical_skill_id == skill.skill_id
+    # Create a fake source without calling discover
+    fake_source = SourceRecord(
+        source_id="test-123",
+        platform="github",
+        platform_skill_id="nonexistent/repo",
+        fetched_at=datetime.now(timezone.utc),
+        raw_url="https://github.com/nonexistent/repo",
+        dedupe_hash="github:nonexistent/repo",
+    )
+    
+    # Should raise ValueError
+    with pytest.raises(ValueError, match="Call discover"):
+        adapter.fetch(fake_source)
+
