@@ -37,6 +37,12 @@ export default function RootLayout({
                   Skills
                 </Link>
                 <Link 
+                  href="/ingest" 
+                  className="text-text-primary hover:text-primary px-3 py-2 text-sm font-medium"
+                >
+                  Ingest
+                </Link>
+                <Link 
                   href="/recommend" 
                   className="text-text-primary hover:text-primary px-3 py-2 text-sm font-medium"
                 >
