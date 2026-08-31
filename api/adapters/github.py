@@ -69,6 +69,15 @@ class GitHubAdapter:
             fetcher: 可注入的 fetcher（默认用 FakeGitHubFetcher）
         """
         self.fetcher = fetcher or FakeGitHubFetcher()
+        self._item_cache: dict[str, dict] = {}  # Cache for search results
+    
+    def _cache_item(self, repo_full_name: str, item: dict) -> None:
+        """缓存搜索结果项用于 fetch。"""
+        self._item_cache[repo_full_name] = item
+    
+    def _get_cached_item(self, repo_full_name: str) -> dict | None:
+        """获取缓存的搜索结果项。"""
+        return self._item_cache.get(repo_full_name)
     
     def discover(self, query: str, limit: int = 20) -> list[SourceRecord]:
         """发现候选技能（仅元数据）。
@@ -90,7 +99,7 @@ class GitHubAdapter:
             if is_duplicate(self.platform, repo_full_name):
                 continue
             
-            # 构造 SourceRecord
+            # 构造 SourceRecord（保存完整 item 用于后续 fetch）
             source = SourceRecord(
                 source_id=str(uuid.uuid4()),
                 platform=self.platform,
@@ -100,6 +109,8 @@ class GitHubAdapter:
                 dedupe_hash=compute_dedupe_hash(self.platform, repo_full_name),
                 canonical_skill_id=None  # 尚未关联
             )
+            # Store raw item data for fetch() to use
+            self._cache_item(repo_full_name, item)
             sources.append(source)
         
         return sources
@@ -115,13 +126,16 @@ class GitHubAdapter:
         """
         repo_full_name = source.platform_skill_id
         
+        # 获取缓存的原始数据（用于提取 license/topics/description）
+        cached_item = self._get_cached_item(repo_full_name)
+        
         # 获取 SKILL.md
         skill_md_content = self.fetcher.get_skill_md(repo_full_name)
         if skill_md_content is None:
             skill_md_content = ""
         
-        # 解析 SKILL.md
-        metadata = self._parse_skill_md(skill_md_content, source.raw_url)
+        # 解析 SKILL.md 和原始数据
+        metadata = self._parse_skill_md(skill_md_content, cached_item)
         
         # 构造 CanonicalSkill
         skill_id = self._compute_skill_id(repo_full_name)
@@ -166,12 +180,12 @@ class GitHubAdapter:
         content = f"github:{repo_full_name}"
         return hashlib.sha256(content.encode()).hexdigest()
     
-    def _parse_skill_md(self, content: str, fallback_url: str) -> dict:
+    def _parse_skill_md(self, content: str, cached_item: dict | None = None) -> dict:
         """解析 SKILL.md 内容。
         
         Args:
             content: SKILL.md 文本
-            fallback_url: 回退用的 URL（从 description 提取）
+            cached_item: 缓存的搜索结果（含 license/topics/description）
             
         Returns:
             {name, description, license, target_domains, required_languages}
@@ -183,6 +197,22 @@ class GitHubAdapter:
             "target_domains": [],
             "required_languages": [],
         }
+        
+        # 从 cached_item 提取 license 和 topics
+        if cached_item:
+            # Extract license
+            license_info = cached_item.get("license")
+            if license_info and isinstance(license_info, dict):
+                spdx_id = license_info.get("spdx_id")
+                if spdx_id:
+                    metadata["license"] = spdx_id
+            
+            # Extract domains from topics
+            topics = cached_item.get("topics", [])
+            known_domains = ["documentation", "file-processing", "data", "web", "api", "pdf"]
+            for domain in known_domains:
+                if domain in topics or domain.replace("-", "") in topics:
+                    metadata["target_domains"].append(domain)
         
         # 尝试解析 frontmatter
         if content.startswith("---"):
@@ -209,16 +239,21 @@ class GitHubAdapter:
         
         # 如果没有 description，从全文提取第一段
         if not metadata["description"]:
-            lines = [l for l in content.split("\n") if l.strip() and not l.startswith("#")]
+            lines = [l for l in content.split("\n") if l.strip() and not l.startswith("#") and not l.startswith("---")]
             if lines:
                 metadata["description"] = lines[0][:200]
         
-        # 从内容中提取 domains（简单关键词匹配）
+        # 如果还是没有 description，用 cached_item 的 description
+        if not metadata["description"] and cached_item:
+            metadata["description"] = cached_item.get("description", "")
+        
+        # 从内容中提取额外的 domains（补充 topics）
         content_lower = content.lower()
         known_domains = ["documentation", "file-processing", "data", "web", "api", "pdf"]
         for domain in known_domains:
-            if domain in content_lower or domain.replace("-", " ") in content_lower:
-                metadata["target_domains"].append(domain)
+            if domain not in metadata["target_domains"]:
+                if domain in content_lower or domain.replace("-", " ") in content_lower:
+                    metadata["target_domains"].append(domain)
         
         # 从内容中提取 languages（简单关键词匹配）
         known_languages = ["python", "javascript", "typescript", "go", "java", "rust"]
