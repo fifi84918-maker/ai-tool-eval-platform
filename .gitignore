@@ -50,3 +50,8 @@ next-env.d.ts
 # Editor temporaries
 *.swp
 
+# SQLite database files (data/app.db is the default, never commit it)
+data/app.db
+data/*.db
+*.db
+

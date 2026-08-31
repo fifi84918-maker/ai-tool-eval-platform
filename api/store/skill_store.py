@@ -1,6 +1,17 @@
-"""In-Memory Skill Store for L2 Data Layer (V1A L2)."""
+"""SQLite-backed Skill Store for L2 Data Layer (V1A persistent).
 
+Replaces the in-memory dicts with SQLite while keeping the exact same
+public interface, so all callers (adapters, scanners, scorer, pipeline,
+tests) work unchanged.
+
+Thread-safety: sqlite3 WAL mode + thread-local connections.
+Test isolation: set APP_DB_PATH=:memory: (or any tmp file) before import.
+"""
+
+import json
 from datetime import datetime, timezone
+
+from api.db.database import get_conn, _json_loads_safe
 from api.models import (
     CanonicalSkill,
     SourceRecord,
@@ -9,145 +20,309 @@ from api.models import (
 )
 
 
-# In-memory storage
-_skills: dict[str, CanonicalSkill] = {}
-_sources: dict[str, SourceRecord] = {}
-_artifacts: dict[str, ArtifactRecord] = {}
+# ---------------------------------------------------------------------------
+# Internal helpers
+# ---------------------------------------------------------------------------
 
+def _now_iso() -> str:
+    return datetime.now(timezone.utc).isoformat()
+
+
+def _json_dumps(obj) -> str:
+    """JSON-serialize with datetime → ISO string fallback."""
+    def default(o):
+        if isinstance(o, datetime):
+            return o.isoformat()
+        raise TypeError(f"Not serializable: {type(o)}")
+    return json.dumps(obj, default=default)
+
+
+def _skill_to_row(skill: CanonicalSkill) -> dict:
+    """Serialise CanonicalSkill → column dict."""
+    return {
+        "skill_id":          skill.skill_id,
+        "name":              skill.name,
+        "description":       skill.description,
+        "platform":          skill.platform,
+        "platform_skill_id": skill.platform_skill_id,
+        "underlying_model":  skill.underlying_model,
+        "license":           skill.license,
+        "security_level":    skill.security_level,
+        "high_risk":         int(skill.high_risk),
+        "target_domains":    json.dumps(skill.target_domains),
+        "required_languages": json.dumps(skill.required_languages),
+        "cost_info":         json.dumps(skill.cost_info) if skill.cost_info is not None else None,
+        "benchmark_score":   skill.benchmark_score,
+        "certification":     skill.certification,
+        "state":             skill.state,
+        "state_history":     _json_dumps(skill.state_history),
+        "created_at":        skill.created_at.isoformat(),
+        "updated_at":        skill.updated_at.isoformat(),
+        "source_refs":       json.dumps(skill.source_refs),
+        "artifact_refs":     json.dumps(skill.artifact_refs),
+    }
+
+
+def _row_to_skill(row) -> CanonicalSkill:
+    """Deserialise a sqlite3.Row → CanonicalSkill."""
+    d = dict(row)
+    return CanonicalSkill(
+        skill_id=d["skill_id"],
+        name=d["name"],
+        description=d["description"],
+        platform=d["platform"],
+        platform_skill_id=d.get("platform_skill_id"),
+        underlying_model=d.get("underlying_model"),
+        license=d.get("license"),
+        security_level=d.get("security_level", "standard"),
+        high_risk=bool(d.get("high_risk", 0)),
+        target_domains=_json_loads_safe(d.get("target_domains"), []),
+        required_languages=_json_loads_safe(d.get("required_languages"), []),
+        cost_info=_json_loads_safe(d.get("cost_info"), None),
+        benchmark_score=d.get("benchmark_score"),
+        certification=d.get("certification"),
+        state=d["state"],
+        state_history=_json_loads_safe(d.get("state_history"), []),
+        created_at=datetime.fromisoformat(d["created_at"]),
+        updated_at=datetime.fromisoformat(d["updated_at"]),
+        source_refs=_json_loads_safe(d.get("source_refs"), []),
+        artifact_refs=_json_loads_safe(d.get("artifact_refs"), []),
+    )
+
+
+def _source_to_row(source: SourceRecord) -> dict:
+    return {
+        "source_id":          source.source_id,
+        "platform":           source.platform,
+        "platform_skill_id":  source.platform_skill_id,
+        "fetched_at":         source.fetched_at.isoformat(),
+        "raw_url":            source.raw_url,
+        "dedupe_hash":        source.dedupe_hash,
+        "canonical_skill_id": source.canonical_skill_id,
+    }
+
+
+def _row_to_source(row) -> SourceRecord:
+    d = dict(row)
+    return SourceRecord(
+        source_id=d["source_id"],
+        platform=d["platform"],
+        platform_skill_id=d["platform_skill_id"],
+        fetched_at=datetime.fromisoformat(d["fetched_at"]),
+        raw_url=d["raw_url"],
+        dedupe_hash=d["dedupe_hash"],
+        canonical_skill_id=d.get("canonical_skill_id"),
+    )
+
+
+def _artifact_to_row(artifact: ArtifactRecord) -> dict:
+    return {
+        "artifact_id":  artifact.artifact_id,
+        "skill_id":     artifact.skill_id,
+        "kind":         artifact.kind,
+        "path_or_text": artifact.path_or_text,
+        "created_at":   artifact.created_at.isoformat(),
+    }
+
+
+def _row_to_artifact(row) -> ArtifactRecord:
+    d = dict(row)
+    return ArtifactRecord(
+        artifact_id=d["artifact_id"],
+        skill_id=d["skill_id"],
+        kind=d["kind"],
+        path_or_text=d["path_or_text"],
+        created_at=datetime.fromisoformat(d["created_at"]),
+    )
+
+
+# ---------------------------------------------------------------------------
+# Public skill API
+# ---------------------------------------------------------------------------
 
 def put_skill(skill: CanonicalSkill) -> None:
-    """存储或更新技能。
-    
-    Args:
-        skill: CanonicalSkill 实例
-    """
+    """Upsert a skill into the DB (updates updated_at automatically)."""
     skill.updated_at = datetime.now(timezone.utc)
-    _skills[skill.skill_id] = skill
+    row = _skill_to_row(skill)
+    conn = get_conn()
+    conn.execute(
+        """
+        INSERT INTO skills (
+            skill_id, name, description, platform, platform_skill_id,
+            underlying_model, license, security_level, high_risk,
+            target_domains, required_languages, cost_info, benchmark_score,
+            certification, state, state_history, created_at, updated_at,
+            source_refs, artifact_refs
+        ) VALUES (
+            :skill_id, :name, :description, :platform, :platform_skill_id,
+            :underlying_model, :license, :security_level, :high_risk,
+            :target_domains, :required_languages, :cost_info, :benchmark_score,
+            :certification, :state, :state_history, :created_at, :updated_at,
+            :source_refs, :artifact_refs
+        )
+        ON CONFLICT(skill_id) DO UPDATE SET
+            name              = excluded.name,
+            description       = excluded.description,
+            platform          = excluded.platform,
+            platform_skill_id = excluded.platform_skill_id,
+            underlying_model  = excluded.underlying_model,
+            license           = excluded.license,
+            security_level    = excluded.security_level,
+            high_risk         = excluded.high_risk,
+            target_domains    = excluded.target_domains,
+            required_languages= excluded.required_languages,
+            cost_info         = excluded.cost_info,
+            benchmark_score   = excluded.benchmark_score,
+            certification     = excluded.certification,
+            state             = excluded.state,
+            state_history     = excluded.state_history,
+            updated_at        = excluded.updated_at,
+            source_refs       = excluded.source_refs,
+            artifact_refs     = excluded.artifact_refs
+        """,
+        row,
+    )
+    conn.commit()
 
 
 def get_skill(skill_id: str) -> CanonicalSkill | None:
-    """获取技能。
-    
-    Args:
-        skill_id: 技能 ID
-        
-    Returns:
-        CanonicalSkill 或 None
-    """
-    return _skills.get(skill_id)
+    """Fetch a skill by ID; returns None if not found."""
+    conn = get_conn()
+    row = conn.execute(
+        "SELECT * FROM skills WHERE skill_id = ?", (skill_id,)
+    ).fetchone()
+    return _row_to_skill(row) if row else None
 
 
 def list_skills(filter_by_state: str | None = None) -> list[CanonicalSkill]:
-    """列出技能，可按状态过滤。
-    
-    Args:
-        filter_by_state: 可选状态过滤
-        
-    Returns:
-        CanonicalSkill 列表
-    """
+    """List all skills, optionally filtered by state."""
+    conn = get_conn()
     if filter_by_state is None:
-        return list(_skills.values())
-    
-    return [s for s in _skills.values() if s.state == filter_by_state]
+        rows = conn.execute("SELECT * FROM skills").fetchall()
+    else:
+        rows = conn.execute(
+            "SELECT * FROM skills WHERE state = ?", (filter_by_state,)
+        ).fetchall()
+    return [_row_to_skill(r) for r in rows]
 
+
+# ---------------------------------------------------------------------------
+# Public source API
+# ---------------------------------------------------------------------------
 
 def put_source(source: SourceRecord) -> None:
-    """存储源记录。
-    
-    Args:
-        source: SourceRecord 实例
-    """
-    _sources[source.source_id] = source
+    """Upsert a source record (unique on dedupe_hash)."""
+    row = _source_to_row(source)
+    conn = get_conn()
+    conn.execute(
+        """
+        INSERT INTO sources (
+            source_id, platform, platform_skill_id, fetched_at,
+            raw_url, dedupe_hash, canonical_skill_id
+        ) VALUES (
+            :source_id, :platform, :platform_skill_id, :fetched_at,
+            :raw_url, :dedupe_hash, :canonical_skill_id
+        )
+        ON CONFLICT(source_id) DO UPDATE SET
+            platform           = excluded.platform,
+            platform_skill_id  = excluded.platform_skill_id,
+            fetched_at         = excluded.fetched_at,
+            raw_url            = excluded.raw_url,
+            dedupe_hash        = excluded.dedupe_hash,
+            canonical_skill_id = excluded.canonical_skill_id
+        """,
+        row,
+    )
+    conn.commit()
 
 
 def get_source(source_id: str) -> SourceRecord | None:
-    """获取源记录。
-    
-    Args:
-        source_id: 源 ID
-        
-    Returns:
-        SourceRecord 或 None
-    """
-    return _sources.get(source_id)
+    conn = get_conn()
+    row = conn.execute(
+        "SELECT * FROM sources WHERE source_id = ?", (source_id,)
+    ).fetchone()
+    return _row_to_source(row) if row else None
 
 
 def list_sources() -> list[SourceRecord]:
-    """列出所有源记录。
-    
-    Returns:
-        SourceRecord 列表
-    """
-    return list(_sources.values())
+    conn = get_conn()
+    rows = conn.execute("SELECT * FROM sources").fetchall()
+    return [_row_to_source(r) for r in rows]
 
+
+# ---------------------------------------------------------------------------
+# Public artifact API
+# ---------------------------------------------------------------------------
 
 def put_artifact(artifact: ArtifactRecord) -> None:
-    """存储制品记录。
-    
-    Args:
-        artifact: ArtifactRecord 实例
-    """
-    _artifacts[artifact.artifact_id] = artifact
+    """Upsert an artifact record."""
+    row = _artifact_to_row(artifact)
+    conn = get_conn()
+    conn.execute(
+        """
+        INSERT INTO artifacts (artifact_id, skill_id, kind, path_or_text, created_at)
+        VALUES (:artifact_id, :skill_id, :kind, :path_or_text, :created_at)
+        ON CONFLICT(artifact_id) DO UPDATE SET
+            skill_id     = excluded.skill_id,
+            kind         = excluded.kind,
+            path_or_text = excluded.path_or_text,
+            created_at   = excluded.created_at
+        """,
+        row,
+    )
+    conn.commit()
 
 
 def get_artifact(artifact_id: str) -> ArtifactRecord | None:
-    """获取制品记录。
-    
-    Args:
-        artifact_id: 制品 ID
-        
-    Returns:
-        ArtifactRecord 或 None
-    """
-    return _artifacts.get(artifact_id)
+    conn = get_conn()
+    row = conn.execute(
+        "SELECT * FROM artifacts WHERE artifact_id = ?", (artifact_id,)
+    ).fetchone()
+    return _row_to_artifact(row) if row else None
 
 
 def list_artifacts(skill_id: str | None = None) -> list[ArtifactRecord]:
-    """列出制品记录，可按技能过滤。
-    
-    Args:
-        skill_id: 可选技能 ID
-        
-    Returns:
-        ArtifactRecord 列表
-    """
+    conn = get_conn()
     if skill_id is None:
-        return list(_artifacts.values())
-    
-    return [a for a in _artifacts.values() if a.skill_id == skill_id]
+        rows = conn.execute("SELECT * FROM artifacts").fetchall()
+    else:
+        rows = conn.execute(
+            "SELECT * FROM artifacts WHERE skill_id = ?", (skill_id,)
+        ).fetchall()
+    return [_row_to_artifact(r) for r in rows]
 
+
+# ---------------------------------------------------------------------------
+# State machine
+# ---------------------------------------------------------------------------
 
 def transition_state(skill_id: str, to_state: str, reason: str) -> None:
-    """执行状态转换（含校验）。
-    
-    Args:
-        skill_id: 技能 ID
-        to_state: 目标状态
-        reason: 转换原因
-        
-    Raises:
-        ValueError: 技能不存在或不允许的转换
-    """
+    """Validate and apply a state transition (persists immediately)."""
     skill = get_skill(skill_id)
     if skill is None:
         raise ValueError(f"Skill not found: {skill_id}")
-    
-    # Create transition (this validates it)
+
     transition = create_transition(skill.state, to_state, reason)
-    
-    # Update skill
+
     skill.state = to_state
     skill.state_history.append(transition.model_dump())
     skill.updated_at = datetime.now(timezone.utc)
-    
-    # Save back
+
     put_skill(skill)
 
 
+# ---------------------------------------------------------------------------
+# Test helper
+# ---------------------------------------------------------------------------
+
 def clear_all() -> None:
-    """清空所有存储（测试用）。"""
-    global _skills, _sources, _artifacts
-    _skills.clear()
-    _sources.clear()
-    _artifacts.clear()
+    """Delete all rows from all store tables.
+
+    Used by test fixtures (autouse) to isolate test runs.
+    Works for both :memory: DB and file DB pointed at by APP_DB_PATH.
+    """
+    conn = get_conn()
+    conn.execute("DELETE FROM artifacts")
+    conn.execute("DELETE FROM sources")
+    conn.execute("DELETE FROM skills")
+    conn.commit()
