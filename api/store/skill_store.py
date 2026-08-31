@@ -57,6 +57,13 @@ def _skill_to_row(skill: CanonicalSkill) -> dict:
         "certification":     skill.certification,
         "state":             skill.state,
         "state_history":     _json_dumps(skill.state_history),
+        # V1E admission fields
+        "status":            skill.status,
+        "entity_type":       skill.entity_type,
+        "risk_flags":        json.dumps(skill.risk_flags),
+        "status_changed_at": skill.status_changed_at.isoformat()
+                             if skill.status_changed_at is not None else None,
+        "canonical_name":    skill.canonical_name,
         "created_at":        skill.created_at.isoformat(),
         "updated_at":        skill.updated_at.isoformat(),
         "source_refs":       json.dumps(skill.source_refs),
@@ -67,6 +74,15 @@ def _skill_to_row(skill: CanonicalSkill) -> dict:
 def _row_to_skill(row) -> CanonicalSkill:
     """Deserialise a sqlite3.Row → CanonicalSkill."""
     d = dict(row)
+    # status_changed_at may be absent in older rows
+    sca_raw = d.get("status_changed_at")
+    status_changed_at = None
+    if sca_raw:
+        try:
+            from datetime import datetime as _dt
+            status_changed_at = _dt.fromisoformat(sca_raw)
+        except ValueError:
+            pass
     return CanonicalSkill(
         skill_id=d["skill_id"],
         name=d["name"],
@@ -85,6 +101,12 @@ def _row_to_skill(row) -> CanonicalSkill:
         certification=d.get("certification"),
         state=d["state"],
         state_history=_json_loads_safe(d.get("state_history"), []),
+        # V1E admission fields — default-safe for old rows
+        status=d.get("status") or "DISCOVERED",
+        entity_type=d.get("entity_type") or "SKILL",
+        risk_flags=_json_loads_safe(d.get("risk_flags"), []),
+        status_changed_at=status_changed_at,
+        canonical_name=d.get("canonical_name"),
         created_at=datetime.fromisoformat(d["created_at"]),
         updated_at=datetime.fromisoformat(d["updated_at"]),
         source_refs=_json_loads_safe(d.get("source_refs"), []),
@@ -153,14 +175,16 @@ def put_skill(skill: CanonicalSkill) -> None:
             skill_id, name, description, platform, platform_skill_id,
             underlying_model, license, security_level, high_risk,
             target_domains, required_languages, cost_info, benchmark_score,
-            dynamic_score, certification, state, state_history, created_at,
-            updated_at, source_refs, artifact_refs
+            dynamic_score, certification, state, state_history,
+            status, entity_type, risk_flags, status_changed_at, canonical_name,
+            created_at, updated_at, source_refs, artifact_refs
         ) VALUES (
             :skill_id, :name, :description, :platform, :platform_skill_id,
             :underlying_model, :license, :security_level, :high_risk,
             :target_domains, :required_languages, :cost_info, :benchmark_score,
-            :dynamic_score, :certification, :state, :state_history, :created_at,
-            :updated_at, :source_refs, :artifact_refs
+            :dynamic_score, :certification, :state, :state_history,
+            :status, :entity_type, :risk_flags, :status_changed_at, :canonical_name,
+            :created_at, :updated_at, :source_refs, :artifact_refs
         )
         ON CONFLICT(skill_id) DO UPDATE SET
             name              = excluded.name,
@@ -179,6 +203,11 @@ def put_skill(skill: CanonicalSkill) -> None:
             certification     = excluded.certification,
             state             = excluded.state,
             state_history     = excluded.state_history,
+            status            = excluded.status,
+            entity_type       = excluded.entity_type,
+            risk_flags        = excluded.risk_flags,
+            status_changed_at = excluded.status_changed_at,
+            canonical_name    = excluded.canonical_name,
             updated_at        = excluded.updated_at,
             source_refs       = excluded.source_refs,
             artifact_refs     = excluded.artifact_refs

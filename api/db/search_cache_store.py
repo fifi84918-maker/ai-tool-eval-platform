@@ -78,7 +78,7 @@ def get_cached(cache_key: str) -> list[dict] | None:
     age = datetime.now(timezone.utc) - fetched_at
     ttl = timedelta(hours=_ttl_hours())
 
-    if age > ttl:
+    if age > ttl or ttl.total_seconds() == 0:
         logger.info(
             "search_cache stale (age=%.1fh, ttl=%.1fh): %s",
             age.total_seconds() / 3600,

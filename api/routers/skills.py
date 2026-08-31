@@ -128,6 +128,9 @@ def get_skill_by_id(skill_id: str, index: InMemorySkillIndex | None = None) -> d
         "failure_cases": scrubbed_detail.get("failure_cases", []),
         "test_env": scrubbed_detail.get("test_env", None),
         "source_platforms": scrubbed_detail.get("source_platforms", [scrubbed_detail.get("summary", {}).get("source_kind", "")]),
+        # V1E: static detection + dynamic scoring
+        "risk_flags": scrubbed_detail.get("risk_flags", []),
+        "dynamic_score": scrubbed_detail.get("dynamic_score", None),
     }
     
     return {

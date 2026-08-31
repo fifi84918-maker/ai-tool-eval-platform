@@ -96,9 +96,16 @@ CREATE TABLE IF NOT EXISTS skills (
     required_languages TEXT NOT NULL DEFAULT '[]',-- JSON list
     cost_info       TEXT,                          -- JSON obj or NULL
     benchmark_score REAL,
+    dynamic_score   REAL,
     certification   TEXT,
     state           TEXT NOT NULL,
     state_history   TEXT NOT NULL DEFAULT '[]',   -- JSON list of dicts
+    -- V1E admission fields
+    status          TEXT NOT NULL DEFAULT 'DISCOVERED',
+    entity_type     TEXT NOT NULL DEFAULT 'SKILL',
+    risk_flags      TEXT NOT NULL DEFAULT '[]',   -- JSON array of {rule,severity,detail}
+    status_changed_at TEXT,
+    canonical_name  TEXT,
     created_at      TEXT NOT NULL,
     updated_at      TEXT NOT NULL,
     source_refs     TEXT NOT NULL DEFAULT '[]',   -- JSON list of source_ids
@@ -195,7 +202,17 @@ def _ensure_columns(conn: sqlite3.Connection) -> None:
     Uses ALTER TABLE ... ADD COLUMN which is idempotent when guarded by
     a column-existence check.  Never drops or modifies existing columns.
     """
+    # V1D: dynamic scoring
     _add_column_if_missing(conn, "skills", "dynamic_score", "REAL")
+    # V1E: admission fields
+    _add_column_if_missing(conn, "skills", "status",
+                           "TEXT NOT NULL DEFAULT 'DISCOVERED'")
+    _add_column_if_missing(conn, "skills", "entity_type",
+                           "TEXT NOT NULL DEFAULT 'SKILL'")
+    _add_column_if_missing(conn, "skills", "risk_flags",
+                           "TEXT NOT NULL DEFAULT '[]'")
+    _add_column_if_missing(conn, "skills", "status_changed_at", "TEXT")
+    _add_column_if_missing(conn, "skills", "canonical_name", "TEXT")
 
 
 def _add_column_if_missing(

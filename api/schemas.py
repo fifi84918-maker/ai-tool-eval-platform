@@ -30,6 +30,14 @@ class SkillDetailOut(BaseModel):
     admission_reasons: list[str]
     warnings: list[str]
     json_ld: dict[str, Any] | None = Field(None, description="JSON-LD structured card")
+    # V1E: static detection results
+    risk_flags: list[dict] = Field(
+        default_factory=list,
+        description="[{rule, severity, detail}] from V1E static checks",
+    )
+    dynamic_score: float | None = Field(
+        None, description="V1D dynamic syntax/validity score (0-100)"
+    )
     
     # V1A Task 29.4.3: PRD 19.3 extended fields
     evidence_grade_detail: str | None = Field(None, description="Evidence grade with detail (C/D/U)")
