@@ -2,6 +2,10 @@
 
 import hashlib
 import uuid
+import os
+import urllib.request
+import urllib.parse
+import json
 from datetime import datetime, timezone
 from typing import Protocol
 from api.models import CanonicalSkill, SourceRecord, ArtifactRecord
@@ -304,3 +308,97 @@ class GitHubAdapter:
                 metadata["required_languages"].append(lang)
         
         return metadata
+
+
+class RealGitHubFetcher:
+    """真实 GitHub API 实现。"""
+    
+    def __init__(self, token: str = None):
+        """初始化 GitHub API fetcher。
+        
+        Args:
+            token: GitHub personal access token (optional, reads from GITHUB_TOKEN env var)
+            
+        Raises:
+            ValueError: If token not provided and GITHUB_TOKEN not set
+        """
+        self.token = token or os.environ.get("GITHUB_TOKEN")
+        if not self.token:
+            raise ValueError(
+                "GITHUB_TOKEN environment variable not set. "
+                "Please set it with: export GITHUB_TOKEN=your_token_here"
+            )
+        self.headers = {
+            "Authorization": f"token {self.token}",
+            "Accept": "application/vnd.github.v3+json",
+            "User-Agent": "ai-tool-eval-platform",
+        }
+    
+    def search(self, query: str, limit: int = 20) -> list[dict]:
+        """调用 GitHub Search API 搜索仓库。
+        
+        Args:
+            query: Search query
+            limit: Maximum results
+            
+        Returns:
+            List of repository dicts matching GitHubFetcher protocol
+        """
+        # Encode query
+        encoded = urllib.parse.quote(f"{query} skill")
+        url = f"https://api.github.com/search/repositories?q={encoded}&sort=stars&per_page={limit}"
+        
+        # Make request
+        req = urllib.request.Request(url, headers=self.headers)
+        try:
+            with urllib.request.urlopen(req) as resp:
+                data = json.loads(resp.read())
+        except urllib.error.HTTPError as e:
+            error_body = e.read().decode("utf-8") if hasattr(e, "read") else ""
+            raise RuntimeError(f"GitHub API error: {e.code} {e.reason}. {error_body}")
+        
+        # Transform to expected format
+        results = []
+        for item in data.get("items", []):
+            repo_full_name = f"{item['owner']['login']}/{item['name']}"
+            
+            results.append({
+                "repo_full_name": repo_full_name,
+                "description": item.get("description", ""),
+                "html_url": item["html_url"],
+                "license": {"spdx_id": item["license"]["spdx_id"]} if item.get("license") else None,
+                "topics": item.get("topics", []),
+            })
+        
+        return results
+    
+    def get_skill_md(self, repo_full_name: str) -> str | None:
+        """从 GitHub raw 读取 SKILL.md 内容。
+        
+        Args:
+            repo_full_name: Repository full name (owner/repo)
+            
+        Returns:
+            SKILL.md content or None if not found
+        """
+        # Try main branch first
+        branches = ["main", "master"]
+        
+        for branch in branches:
+            url = f"https://raw.githubusercontent.com/{repo_full_name}/{branch}/SKILL.md"
+            req = urllib.request.Request(url, headers=self.headers)
+            
+            try:
+                with urllib.request.urlopen(req) as resp:
+                    return resp.read().decode("utf-8")
+            except urllib.error.HTTPError as e:
+                if e.code == 404:
+                    # Try next branch
+                    continue
+                else:
+                    # Other error, raise
+                    raise RuntimeError(f"GitHub raw file error: {e.code} {e.reason}")
+        
+        # Not found in any branch
+        return None
+
