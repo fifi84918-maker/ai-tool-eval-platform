@@ -165,6 +165,19 @@ CREATE TABLE IF NOT EXISTS ingest_runs (
     runnable    INTEGER NOT NULL DEFAULT 0,
     errors_json TEXT NOT NULL DEFAULT '[]'  -- JSON list of error dicts
 );
+
+-- search result cache -------------------------------------------------------
+-- Caches GitHub search API responses to avoid repeat calls within TTL window.
+-- cache_key is a stable hash of the normalised (q + qualifiers) tuple.
+CREATE TABLE IF NOT EXISTS search_cache (
+    cache_key           TEXT PRIMARY KEY,   -- sha256(normalised params)
+    query               TEXT NOT NULL,      -- original user query string
+    params_json         TEXT NOT NULL,      -- qualifiers snapshot (JSON)
+    results_json        TEXT NOT NULL,      -- items list (JSON)
+    total_count         INTEGER,
+    incomplete_results  INTEGER NOT NULL DEFAULT 0,  -- 0/1 bool
+    fetched_at          TEXT NOT NULL       -- ISO-8601 UTC timestamp
+);
 """
 
 

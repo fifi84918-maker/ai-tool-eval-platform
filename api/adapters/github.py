@@ -334,21 +334,35 @@ class RealGitHubFetcher:
             "User-Agent": "ai-tool-eval-platform",
         }
     
-    def search(self, query: str, limit: int = 20) -> list[dict]:
+    def search(
+        self,
+        query: str,
+        limit: int = 20,
+        sort: str = "stars",
+        order: str = "desc",
+    ) -> list[dict]:
         """调用 GitHub Search API 搜索仓库。
-        
+
         Args:
-            query: Search query
-            limit: Maximum results
-            
+            query: Full search query string (qualifiers already embedded).
+                   The caller (query_builder) is responsible for constructing
+                   the final q; this method does NOT append extra tokens.
+            limit: Maximum results (1-100).
+            sort:  Sort field — "stars" | "updated" | "best_match".
+            order: Sort direction — "desc" | "asc".
+
         Returns:
-            List of repository dicts matching GitHubFetcher protocol
+            List of repository dicts matching GitHubFetcher protocol.
         """
-        # Encode query
-        encoded = urllib.parse.quote(f"{query} skill")
-        url = f"https://api.github.com/search/repositories?q={encoded}&sort=stars&per_page={limit}"
-        
-        # Make request
+        # Build URL with properly encoded params
+        params = urllib.parse.urlencode({
+            "q": query,
+            "sort": sort,
+            "order": order,
+            "per_page": min(limit, 100),
+        })
+        url = f"https://api.github.com/search/repositories?{params}"
+
         req = urllib.request.Request(url, headers=self.headers)
         try:
             with urllib.request.urlopen(req) as resp:
@@ -356,12 +370,11 @@ class RealGitHubFetcher:
         except urllib.error.HTTPError as e:
             error_body = e.read().decode("utf-8") if hasattr(e, "read") else ""
             raise RuntimeError(f"GitHub API error: {e.code} {e.reason}. {error_body}")
-        
-        # Transform to expected format
+
+        # Transform to expected format (GitHubFetcher protocol)
         results = []
         for item in data.get("items", []):
             repo_full_name = f"{item['owner']['login']}/{item['name']}"
-            
             results.append({
                 "repo_full_name": repo_full_name,
                 "description": item.get("description", ""),
@@ -369,7 +382,7 @@ class RealGitHubFetcher:
                 "license": {"spdx_id": item["license"]["spdx_id"]} if item.get("license") else None,
                 "topics": item.get("topics", []),
             })
-        
+
         return results
     
     def get_skill_md(self, repo_full_name: str) -> str | None:

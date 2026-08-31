@@ -7,6 +7,12 @@ from api.db.aux_store import (
     save_ingest_run, list_ingest_runs, clear_ingest_runs,
     clear_all_aux,
 )
+from api.db.search_cache_store import (
+    make_cache_key,
+    get_cached,
+    set_cached,
+    clear_search_cache,
+)
 
 __all__ = [
     "get_conn", "close_conn", "init_db",
@@ -14,4 +20,6 @@ __all__ = [
     "append_recommend_history", "list_recommend_history", "clear_recommend_history",
     "save_ingest_run", "list_ingest_runs", "clear_ingest_runs",
     "clear_all_aux",
+    "make_cache_key", "get_cached", "set_cached", "clear_search_cache",
 ]
+
