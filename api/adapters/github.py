@@ -329,7 +329,7 @@ class RealGitHubFetcher:
                 "Please set it with: export GITHUB_TOKEN=your_token_here"
             )
         self.headers = {
-            "Authorization": f"token {self.token}",
+            "Authorization": f"Bearer {self.token}",
             "Accept": "application/vnd.github.v3+json",
             "User-Agent": "ai-tool-eval-platform",
         }
