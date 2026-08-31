@@ -86,8 +86,8 @@ def test_bundle_api_list_search(client):
 
 def test_bundle_api_detail(client):
     """Test GET /api/v1/bundles/{bundle_id} returns correct structure."""
-    # Use first sample bundle
-    bundle_id = BUNDLE_SAMPLES[0]["bundle_id"]
+    # Use tiered bundle
+    bundle_id = "bundle-starter"
     
     response = client.get(f"/api/v1/bundles/{bundle_id}")
     
@@ -101,6 +101,7 @@ def test_bundle_api_detail(client):
     assert "category" in data
     assert "skill_ids" in data  # Should be present in detail
     assert "tags" in data
+    assert "tier" in data
     
     # Check types
     assert isinstance(data["skill_ids"], list)
@@ -174,8 +175,8 @@ def test_bundle_categories_match_existing():
 
 def test_bundles_by_skill(client):
     """Test GET /api/v1/bundles/by-skill/{skill_id} returns correct bundle list."""
-    # Use a skill that is in multiple bundles
-    # From BUNDLE_SAMPLES: doc-skill (219c93e5...) is in bundle-doc-productivity
+    # Use a skill that is in multiple tiered bundles
+    # doc-skill (219c93e5...) is in bundle-starter, bundle-standard, and bundle-enterprise
     skill_id = "219c93e5365609e6060c9afe1d88571324b4fff1a518f16f75353b0cab159733"
     
     response = client.get(f"/api/v1/bundles/by-skill/{skill_id}")
@@ -191,9 +192,9 @@ def test_bundles_by_skill(client):
     # Should find at least one bundle
     assert len(data["items"]) > 0
     
-    # Verify the bundle contains this skill
+    # Verify the bundle contains this skill (should be in all three tiers)
     bundle_ids = [item["bundle_id"] for item in data["items"]]
-    assert "bundle-doc-productivity" in bundle_ids
+    assert "bundle-starter" in bundle_ids or "bundle-standard" in bundle_ids or "bundle-enterprise" in bundle_ids
     
     # Check item structure (should be summary format, no skill_ids)
     for item in data["items"]:
@@ -223,7 +224,7 @@ def test_bundles_by_skill_not_found(client):
 
 def test_bundles_by_skill_multiple_results(client):
     """Test that a skill in multiple bundles returns all of them."""
-    # Use loose-repo (0766e96c...) which is in both bundle-doc-productivity and bundle-fullstack-dev
+    # Use loose-repo (0766e96c...) which is in all three tiered bundles
     skill_id = "0766e96cdeb4121ba7aeac64bcc1fe4a0ab46563a70805f0d2d0767b19eb8e31"
     
     response = client.get(f"/api/v1/bundles/by-skill/{skill_id}")
@@ -231,9 +232,10 @@ def test_bundles_by_skill_multiple_results(client):
     assert response.status_code == 200
     data = response.json()
     
-    # Should find multiple bundles
+    # Should find multiple bundles (all three tiers)
     assert len(data["items"]) >= 2
     
     bundle_ids = [item["bundle_id"] for item in data["items"]]
-    assert "bundle-doc-productivity" in bundle_ids
-    assert "bundle-fullstack-dev" in bundle_ids
+    # Should be in at least 2 of the tiered bundles
+    assert "bundle-starter" in bundle_ids
+    assert "bundle-standard" in bundle_ids or "bundle-enterprise" in bundle_ids
