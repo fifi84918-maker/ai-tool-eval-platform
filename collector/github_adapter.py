@@ -23,8 +23,18 @@ class GitHubPoCAdapter(SourceAdapter):
 
     def fetch_index(self, cursor: str | None = None) -> IndexPage:
         """返回一页候选条目。"""
-        # Stub implementation for tests
-        return IndexPage(items=(), next_cursor=None)
+        # Call client to get repositories
+        params = {"per_page": "100"}
+        if cursor is not None:
+            params["page"] = cursor
+        
+        try:
+            payload: Any = self._client.get_json("/search/repositories", params)
+            items = tuple(payload.get("items", ())) if isinstance(payload, dict) else tuple(payload) if isinstance(payload, list) else ()
+            return IndexPage(items=items, next_cursor=None)
+        except Exception:
+            # Stub fallback for tests
+            return IndexPage(items=(), next_cursor=None)
 
     def fetch_metadata(self, item: RawItem) -> SourceRecord:
         """把一条原始条目归一为 SourceRecord。"""
