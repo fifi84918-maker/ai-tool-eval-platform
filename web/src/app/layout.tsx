@@ -15,24 +15,36 @@ export default function RootLayout({
   return (
     <html lang="en">
       <body className="min-h-screen bg-white">
-        <nav className="bg-white border-b border-[#E5E6EB]">
+        <nav className="bg-white border-b border-border">
           <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
             <div className="flex justify-between h-16 items-center">
               <div className="flex items-center">
-                <Link href="/" className="text-xl font-bold text-[#165DFF]">
+                <Link href="/" className="text-xl font-bold text-primary">
                   AI Skill Eval
                 </Link>
               </div>
               <div className="flex items-center space-x-4">
                 <Link 
                   href="/" 
-                  className="text-[#1D2129] hover:text-[#165DFF] px-3 py-2 text-sm font-medium"
+                  className="text-text-primary hover:text-primary px-3 py-2 text-sm font-medium"
                 >
                   Search
                 </Link>
                 <Link 
+                  href="/skills" 
+                  className="text-text-primary hover:text-primary px-3 py-2 text-sm font-medium"
+                >
+                  Skills
+                </Link>
+                <Link 
+                  href="/recommend" 
+                  className="text-text-primary hover:text-primary px-3 py-2 text-sm font-medium"
+                >
+                  Recommend
+                </Link>
+                <Link 
                   href="/eval" 
-                  className="bg-[#165DFF] hover:bg-[#4080FF] text-white px-4 py-2 rounded-full text-sm font-medium transition-colors"
+                  className="bg-primary hover:bg-primary-hover text-white px-4 py-2 rounded-full text-sm font-medium transition-colors"
                 >
                   Evaluate New Repo
                 </Link>
