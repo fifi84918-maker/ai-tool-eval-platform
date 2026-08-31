@@ -2,8 +2,9 @@
 
 import json
 from datetime import datetime, timezone
-from fastapi import APIRouter, HTTPException
-from pydantic import BaseModel
+from fastapi import APIRouter, HTTPException, Query
+from pydantic import BaseModel, Field
+from typing import Optional
 
 from api.schemas import (
     ProjectProfileCreate,
@@ -175,3 +176,102 @@ def get_recommendation_history_by_profile(profile_id: str):
     if not items:
         raise HTTPException(status_code=404, detail="No recommendation history for profile")
     return HistoryResponse(total=len(items), items=items)
+
+
+# ---------------------------------------------------------------------------
+# V2: Compat-weighted skill recommendation (PRD §7)
+# ---------------------------------------------------------------------------
+
+class ConflictOut(BaseModel):
+    """A detected conflict between skills in the pool."""
+    type:   str
+    items:  list[str]
+    reason: str = ""
+
+
+class RankedSkillOut(BaseModel):
+    """A single ranked skill with compat weight and conflict markers."""
+    skill_id:       str
+    name:           str
+    canonical_name: Optional[str] = None
+    description:    str = ""
+    platform:       str = ""
+    compat_status:  str = "UNKNOWN"
+    composite:      Optional[float] = None
+    evidence_level: Optional[str] = None
+    rank_score:     float = 0.0
+    compat_weight:  float = 0.0
+    excluded:       bool = False
+    score_source:   str = "zero"
+
+
+class SkillRecommendResponse(BaseModel):
+    """Response for GET /api/v1/recommend/skills."""
+    total:     int
+    items:     list[RankedSkillOut]
+    conflicts: list[ConflictOut] = Field(default_factory=list)
+
+
+@router.get("/skills", response_model=SkillRecommendResponse)
+def recommend_skills(
+    include_blocked: bool = Query(
+        False,
+        description="Include INCOMPATIBLE/BLOCKED skills in results (excluded=True)",
+    ),
+    compat_status: Optional[str] = Query(
+        None,
+        description="Filter to a single compat_status (e.g. COMPATIBLE)",
+    ),
+    limit: int = Query(50, ge=1, le=200, description="Max skills to return"),
+):
+    """Rank all scored skills by compat-weighted composite score.
+
+    Returns skills sorted by rank_score descending.
+    Excluded skills (BLOCKED/INCOMPATIBLE) are hidden unless
+    include_blocked=true.
+    Also reports global conflicts (version duplicates + domain overlap).
+    """
+    from api.recommend.ranker   import RecommendRanker
+    from api.recommend.conflict import ConflictDetector
+    from api.recommend.skills_pool import load_skill_pool
+
+    # Load full pool (read-only, cache)
+    pool = load_skill_pool(limit=limit * 4)   # over-fetch, filter below
+
+    # Rank
+    ranked = RecommendRanker().rank(pool)
+
+    # Global conflict detection (over the full pool before filtering)
+    all_conflicts = ConflictDetector().detect(ranked)
+
+    # Filter
+    if compat_status:
+        ranked = [s for s in ranked if s.get("compat_status") == compat_status]
+    if not include_blocked:
+        ranked = [s for s in ranked if not s.get("excluded", False)]
+
+    ranked = ranked[:limit]
+
+    items = [
+        RankedSkillOut(
+            skill_id=s.get("skill_id", ""),
+            name=s.get("name", ""),
+            canonical_name=s.get("canonical_name"),
+            description=s.get("description", ""),
+            platform=s.get("platform", ""),
+            compat_status=s.get("compat_status", "UNKNOWN"),
+            composite=s.get("composite"),
+            evidence_level=s.get("evidence_level"),
+            rank_score=s.get("rank_score", 0.0),
+            compat_weight=s.get("compat_weight", 0.0),
+            excluded=s.get("excluded", False),
+            score_source=s.get("score_source", "zero"),
+        )
+        for s in ranked
+    ]
+
+    return SkillRecommendResponse(
+        total=len(items),
+        items=items,
+        conflicts=[ConflictOut(**c.to_dict()) for c in all_conflicts],
+    )
