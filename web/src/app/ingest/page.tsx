@@ -73,8 +73,22 @@ export default function IngestPage() {
         throw new Error('采集接口未就绪：后端 ingest API 尚未实现')
       }
 
+      if (response.status === 401) {
+        throw new Error('认证失败：请检查 API 访问权限')
+      }
+
+      if (response.status === 422) {
+        const errorData = await response.json().catch(() => null)
+        const detail = errorData?.detail || '输入参数验证失败'
+        throw new Error(`参数错误: ${detail}`)
+      }
+
+      if (response.status >= 500) {
+        throw new Error('服务器内部错误：请稍后重试或联系管理员')
+      }
+
       if (!response.ok) {
-        throw new Error(`请求失败: ${response.status} ${response.statusText}`)
+        throw new Error(`请求失败 (${response.status}): ${response.statusText}`)
       }
 
       const data: IngestResponse = await response.json()
@@ -92,9 +106,9 @@ export default function IngestPage() {
       
       setResult(normalizedResult)
       
-      console.log('✅ 采集完成:', normalizedResult)
+      // console.log('✅ 采集完成:', normalizedResult)
     } catch (err) {
-      console.error('采集失败:', err)
+      // console.error('采集失败:', err)
       setError(err instanceof Error ? err.message : '未知错误')
     } finally {
       setLoading(false)

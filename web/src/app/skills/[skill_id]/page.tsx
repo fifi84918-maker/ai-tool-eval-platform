@@ -101,7 +101,7 @@ export default function SkillDetailPage({
       // Load bundles containing this skill
       loadBundles(params.skill_id)
     } catch (error) {
-      console.error('Failed to fetch skill:', error)
+      // console.error('Failed to fetch skill:', error)
       setSkill(null)
     } finally {
       setLoading(false)
@@ -118,7 +118,7 @@ export default function SkillDetailPage({
         setBundles(data.items || [])
       }
     } catch (error) {
-      console.error('Failed to fetch bundles:', error)
+      // console.error('Failed to fetch bundles:', error)
     } finally {
       setBundlesLoading(false)
     }

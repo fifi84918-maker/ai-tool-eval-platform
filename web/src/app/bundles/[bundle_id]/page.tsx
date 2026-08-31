@@ -99,7 +99,7 @@ export default function BundleDetailPage({
           })
         }
       } catch (err) {
-        console.error(`Failed to load skill ${skillId}:`, err)
+        // console.error(`Failed to load skill ${skillId}:`, err)
         // Add placeholder for failed skill
         loadedSkills.push({
           skill_id: skillId,

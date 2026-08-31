@@ -87,7 +87,7 @@ export default function RecommendPage() {
         security_requirement: securityRequirement,
       }
       
-      console.log('🚀 推荐请求体:', JSON.stringify(requestBody, null, 2))
+      // console.log('🚀 推荐请求体:', JSON.stringify(requestBody, null, 2))
 
       const response = await fetch(`${API_BASE_URL}/api/v1/recommend`, {
         method: 'POST',
@@ -97,14 +97,28 @@ export default function RecommendPage() {
         body: JSON.stringify(requestBody),
       })
 
+      if (response.status === 401) {
+        throw new Error('认证失败：请检查 API 访问权限')
+      }
+
+      if (response.status === 422) {
+        const errorData = await response.json().catch(() => null)
+        const detail = errorData?.detail || '输入参数验证失败'
+        throw new Error(`参数错误: ${detail}`)
+      }
+
+      if (response.status >= 500) {
+        throw new Error('服务器内部错误：请稍后重试')
+      }
+
       if (!response.ok) {
-        throw new Error(`请求失败: ${response.status} ${response.statusText}`)
+        throw new Error(`请求失败 (${response.status}): ${response.statusText}`)
       }
 
       const data: RecommendationResponse = await response.json()
       setRecommendations(data)
     } catch (err) {
-      console.error('推荐请求失败:', err)
+      // console.error('推荐请求失败:', err)
       setError(err instanceof Error ? err.message : '未知错误')
     } finally {
       setLoading(false)
@@ -344,48 +358,56 @@ export default function RecommendPage() {
                   <h4 className="text-sm font-semibold text-text-primary mb-2">
                     推荐理由
                   </h4>
-                  <ul className="space-y-1">
-                    {item.match_reasons.slice(0, 3).map((reason, idx) => (
-                      <li
-                        key={idx}
-                        className="text-sm text-text-secondary flex items-start gap-2"
-                      >
-                        <span className="text-primary mt-0.5">•</span>
-                        <span>{reason}</span>
-                      </li>
-                    ))}
-                  </ul>
+                  {item.match_reasons && item.match_reasons.length > 0 ? (
+                    <ul className="space-y-1">
+                      {item.match_reasons.slice(0, 3).map((reason, idx) => (
+                        <li
+                          key={idx}
+                          className="text-sm text-text-secondary flex items-start gap-2"
+                        >
+                          <span className="text-primary mt-0.5">•</span>
+                          <span>{reason}</span>
+                        </li>
+                      ))}
+                    </ul>
+                  ) : (
+                    <p className="text-sm text-text-tertiary">暂无推荐理由</p>
+                  )}
                 </div>
 
                 {/* Skills List */}
                 <div className="mb-4">
                   <h4 className="text-sm font-semibold text-text-primary mb-2">
-                    包含技能 ({item.skills.length})
+                    包含技能 ({item.skills?.length || 0})
                   </h4>
-                  <div className="space-y-2">
-                    {item.skills.slice(0, 3).map((skill) => (
-                      <Link
-                        key={skill.skill_id}
-                        href={`/skills/${skill.skill_id}`}
-                        className="block p-3 bg-bg-card rounded-lg hover:bg-border transition-colors"
-                      >
-                        <div className="flex items-center justify-between mb-1">
-                          <span className="text-sm font-medium text-text-primary">
-                            {skill.name}
-                          </span>
-                          <GradeBadge grade={skill.grade || getScoreGrade(skill.score_total)} />
+                  {item.skills && item.skills.length > 0 ? (
+                    <div className="space-y-2">
+                      {item.skills.slice(0, 3).map((skill) => (
+                        <Link
+                          key={skill.skill_id}
+                          href={`/skills/${skill.skill_id}`}
+                          className="block p-3 bg-bg-card rounded-lg hover:bg-border transition-colors"
+                        >
+                          <div className="flex items-center justify-between mb-1">
+                            <span className="text-sm font-medium text-text-primary">
+                              {skill.name || '未命名技能'}
+                            </span>
+                            <GradeBadge grade={skill.grade || getScoreGrade(skill.score_total)} />
+                          </div>
+                          <div className="flex items-center justify-between text-xs text-text-tertiary">
+                            <span>评分: {skill.score_total?.toFixed(1) || '—'}</span>
+                          </div>
+                        </Link>
+                      ))}
+                      {item.skills.length > 3 && (
+                        <div className="text-xs text-text-tertiary text-center pt-1">
+                          + {item.skills.length - 3} 个更多技能
                         </div>
-                        <div className="flex items-center justify-between text-xs text-text-tertiary">
-                          <span>评分: {skill.score_total?.toFixed(1) || '—'}</span>
-                        </div>
-                      </Link>
-                    ))}
-                    {item.skills.length > 3 && (
-                      <div className="text-xs text-text-tertiary text-center pt-1">
-                        + {item.skills.length - 3} 个更多技能
-                      </div>
-                    )}
-                  </div>
+                      )}
+                    </div>
+                  ) : (
+                    <p className="text-sm text-text-tertiary">暂无技能信息</p>
+                  )}
                 </div>
 
                 {/* Rule Findings (Collapsible) */}

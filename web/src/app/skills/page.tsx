@@ -58,19 +58,30 @@ export default function SkillsPage() {
     try {
       const response = await fetch(`${API_BASE_URL}/api/v1/skills?limit=100`)
       
+      if (response.status === 404) {
+        setError('接口未就绪：GET /api/v1/skills 暂不可用')
+        return
+      }
+
+      if (response.status === 401) {
+        setError('认证失败：请检查 API 访问权限')
+        return
+      }
+
+      if (response.status >= 500) {
+        setError('服务器内部错误：请稍后重试')
+        return
+      }
+
       if (!response.ok) {
-        if (response.status === 404) {
-          setError('接口未就绪：GET /api/v1/skills 暂不可用')
-          return
-        }
-        throw new Error(`请求失败: ${response.status}`)
+        throw new Error(`请求失败 (${response.status}): ${response.statusText}`)
       }
 
       const data: SkillListResponse = await response.json()
       setSkills(data.items)
       setTotal(data.total)
     } catch (err) {
-      console.error('加载技能列表失败:', err)
+      // console.error('加载技能列表失败:', err)
       setError(err instanceof Error ? err.message : '未知错误')
     } finally {
       setLoading(false)

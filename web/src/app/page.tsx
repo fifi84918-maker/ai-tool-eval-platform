@@ -98,7 +98,7 @@ export default function HomePage() {
         setTotal(data.total || 0)
       }
     } catch (err) {
-      console.error('加载失败:', err)
+      // console.error('加载失败:', err)
       setError(err instanceof Error ? err.message : '加载失败，请稍后重试')
       setSkills([])
       setTotal(0)
@@ -113,7 +113,7 @@ export default function HomePage() {
       const data = await response.json()
       setHistory(data.results || [])
     } catch (error) {
-      console.error('加载历史失败:', error)
+      // console.error('加载历史失败:', error)
     }
   }
 
