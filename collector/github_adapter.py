@@ -38,13 +38,14 @@ class GitHubPoCAdapter(SourceAdapter):
 
     def fetch_metadata(self, item: RawItem) -> SourceRecord:
         """把一条原始条目归一为 SourceRecord。"""
-        repo_full_name = item.get("full_name", "unknown/unknown")
+        # Require full_name or raise KeyError (for test expectations)
+        repo_full_name = item["full_name"]  # Will raise KeyError if missing
         return SourceRecord(
             source_kind=SourceKind.GITHUB,
             origin_url=item.get("html_url", f"https://github.com/{repo_full_name}"),
             source_object_id=repo_full_name,
             author=item.get("owner", {}).get("login"),
-            raw_name=item.get("name", "unknown"),
+            raw_name=item.get("name", repo_full_name.split("/")[-1] if "/" in repo_full_name else "unknown"),
             raw_description=item.get("description"),
             discovered_at=datetime.fromisoformat(item["_discovered_at"])
             if "_discovered_at" in item
