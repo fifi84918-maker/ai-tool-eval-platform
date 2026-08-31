@@ -103,11 +103,16 @@ def run_pipeline(query: str, limit: int = 5, fetcher=None) -> dict:
             report["acquired"] += 1
 
             # ── Stage 3: V1E Static Check ───────────────────────────────────
-            static_verdict, risk_flags = _run_static_check(skill_id, artifacts)
+            static_result = _run_static_check(skill_id, artifacts)
+            # Derive verdict/risk_flags defensively (None = check errored → fail-open)
+            static_verdict = getattr(static_result, "verdict", "REVIEWED") if static_result else "REVIEWED"
+            risk_flags     = getattr(static_result, "risk_flags", []) if static_result else []
 
             if static_verdict == "QUARANTINE":
                 report["quarantined"] += 1
                 skill = get_skill(skill_id)
+                # V1F: score quarantined skill (low scores, evidence C)
+                _run_skill_scorer(skill_id, skill, static_result, None, artifacts)
                 report["skills"].append({
                     "skill_id":      skill_id,
                     "name":          skill.name if skill else skill_id,
@@ -122,6 +127,8 @@ def run_pipeline(query: str, limit: int = 5, fetcher=None) -> dict:
             if static_verdict == "METADATA_ONLY":
                 report["metadata_only"] += 1
                 skill = get_skill(skill_id)
+                # V1F: score metadata-only skill (evidence D)
+                _run_skill_scorer(skill_id, skill, static_result, None, artifacts)
                 report["skills"].append({
                     "skill_id":      skill_id,
                     "name":          skill.name if skill else skill_id,
@@ -160,8 +167,14 @@ def run_pipeline(query: str, limit: int = 5, fetcher=None) -> dict:
 
             # ── Stage 5: V1D Dynamic Check (opt-in) ──────────────────────────
             dynamic_score = None
+            dynamic_result = None
             if os.environ.get("DYNAMIC_SCORING", "disabled").lower() == "enabled":
-                dynamic_score = _run_dynamic_check(skill_id, skill, artifacts)
+                dynamic_score, dynamic_result = _run_dynamic_check(
+                    skill_id, skill, artifacts
+                )
+
+            # ── Stage 6: V1F 8-dimension scoring ─────────────────────────────
+            _run_skill_scorer(skill_id, skill, static_result, dynamic_result, artifacts)
 
             report["skills"].append({
                 "skill_id":      skill_id,
@@ -187,17 +200,17 @@ def run_pipeline(query: str, limit: int = 5, fetcher=None) -> dict:
 # Internal stage helpers
 # ---------------------------------------------------------------------------
 
-def _run_static_check(skill_id: str, artifacts) -> tuple[str, list[dict]]:
+def _run_static_check(skill_id: str, artifacts):
     """Run V1E StaticChecker and persist status + risk_flags on the skill.
 
-    Returns (verdict_str, risk_flags_list).
-    verdict_str is one of 'REVIEWED' | 'QUARANTINE' | 'METADATA_ONLY'.
+    Returns the full StaticResult (or None on error).
+    Callers use .verdict and .risk_flags from the result.
     """
     try:
         from api.scoring.static_check import StaticChecker
         skill = get_skill(skill_id)
         if skill is None:
-            return "REVIEWED", []
+            return None
 
         skill_md = _collect_skill_md(artifacts)
         artifact_dicts = _artifacts_to_dicts(artifacts)
@@ -232,15 +245,18 @@ def _run_static_check(skill_id: str, artifacts) -> tuple[str, list[dict]]:
                 skill_id[:12],
                 [f["rule"] for f in result.risk_flags if f.get("severity") == "block"],
             )
-        return result.verdict, result.risk_flags
+        return result
 
     except Exception as exc:
         logger.warning("static_check error for %s: %s", skill_id, exc)
-        return "REVIEWED", []   # fail-open: let pipeline continue
+        return None   # fail-open: let pipeline continue
 
 
-def _run_dynamic_check(skill_id: str, skill, artifacts) -> float | None:
-    """Run V1D DynamicExecutor (opt-in) and persist dynamic_score."""
+def _run_dynamic_check(skill_id: str, skill, artifacts) -> tuple:
+    """Run V1D DynamicExecutor (opt-in) and persist dynamic_score.
+
+    Returns (dynamic_score: float|None, dyn_result: DynamicResult|None).
+    """
     try:
         from api.scoring.dynamic import DynamicExecutor
         skill_md = _collect_skill_md(artifacts)
@@ -256,7 +272,36 @@ def _run_dynamic_check(skill_id: str, skill, artifacts) -> float | None:
             "dynamic check skill=%s score=%s duration=%.0fms",
             skill_id[:12], dynamic_score, dyn_result.duration_ms,
         )
-        return dynamic_score
+        return dynamic_score, dyn_result
     except Exception as exc:
         logger.warning("dynamic check failed for %s: %s", skill_id, exc)
-        return None
+        return None, None
+
+
+def _run_skill_scorer(
+    skill_id: str,
+    skill,
+    static_result,
+    dynamic_result,
+    artifacts,
+) -> None:
+    """V1F: compute 8-dimension composite score and persist to DB."""
+    try:
+        from api.scoring.scorer import SkillScorer
+        from api.db.score_store import upsert_score
+
+        skill_md = _collect_skill_md(artifacts)
+        score_result = SkillScorer().score(
+            {"skill_id": skill_id, "skill_md": skill_md},
+            static_result=static_result,
+            dynamic_result=dynamic_result,
+        )
+        upsert_score(score_result)
+        logger.info(
+            "v1f score skill=%s composite=%s evidence=%s",
+            skill_id[:12],
+            score_result.composite,
+            score_result.evidence_level,
+        )
+    except Exception as exc:
+        logger.warning("v1f scoring failed for %s: %s", skill_id, exc)

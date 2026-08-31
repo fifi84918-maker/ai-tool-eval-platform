@@ -213,6 +213,11 @@ def _ensure_columns(conn: sqlite3.Connection) -> None:
                            "TEXT NOT NULL DEFAULT '[]'")
     _add_column_if_missing(conn, "skills", "status_changed_at", "TEXT")
     _add_column_if_missing(conn, "skills", "canonical_name", "TEXT")
+    # V1F: 8-dimension scoring
+    _add_column_if_missing(conn, "skills", "dimensions_json", "TEXT")
+    _add_column_if_missing(conn, "skills", "evidence_level",  "TEXT")
+    _add_column_if_missing(conn, "skills", "sample_size",
+                           "INTEGER NOT NULL DEFAULT 0")
 
 
 def _add_column_if_missing(
