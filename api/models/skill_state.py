@@ -1,23 +1,26 @@
-"""Skill State Machine for L2 Data Layer (V1A L2)."""
+"""Skill State Machine for L2 Data Layer (V1A L2) - PRD Aligned.
+
+States aligned with PRD/技术方案 3.1 节的 11 种准入状态。
+"""
 
 from datetime import datetime, timezone
 from typing import Literal
 from pydantic import BaseModel
 
 
-# 11 states
+# 11 admission states from PRD
 SkillState = Literal[
     "DISCOVERED",
+    "METADATA_ONLY",
     "ACQUIRED",
-    "PARSED",
-    "NORMALIZED",
-    "STATIC_SCANNED",
-    "SANDBOX_TESTED",
-    "SCORED",
-    "REVIEWED",
-    "PUBLISHED",
-    "DEPRECATED",
-    "ERROR"
+    "STATIC_REVIEWED",
+    "QUARANTINED",
+    "RUNNABLE",
+    "NEUTRAL_TESTED",
+    "NATIVE_TESTED",
+    "VERIFIED",
+    "STALE",
+    "REMOVED"
 ]
 
 
@@ -29,22 +32,20 @@ class StateTransition(BaseModel):
     at: datetime
 
 
-# Allowed transitions (directed graph)
-# Normal forward flow: DISCOVERED → ... → PUBLISHED
-# ERROR can be entered from any non-terminal state
-# DEPRECATED can only be entered from PUBLISHED
+# Allowed transitions (按 PRD 3.1 语义)
+# STALE → ACQUIRED 是回归路径（环境过期重测），不是非法回退
 ALLOWED_TRANSITIONS: dict[str, set[str]] = {
-    "DISCOVERED": {"ACQUIRED", "ERROR"},
-    "ACQUIRED": {"PARSED", "ERROR"},
-    "PARSED": {"NORMALIZED", "ERROR"},
-    "NORMALIZED": {"STATIC_SCANNED", "ERROR"},
-    "STATIC_SCANNED": {"SANDBOX_TESTED", "ERROR"},
-    "SANDBOX_TESTED": {"SCORED", "ERROR"},
-    "SCORED": {"REVIEWED", "ERROR"},
-    "REVIEWED": {"PUBLISHED", "ERROR"},
-    "PUBLISHED": {"DEPRECATED"},  # Terminal state, can only deprecate
-    "DEPRECATED": set(),  # Terminal state, no transitions
-    "ERROR": set(),  # Terminal state, no transitions
+    "DISCOVERED": {"METADATA_ONLY", "ACQUIRED", "REMOVED"},
+    "METADATA_ONLY": {"ACQUIRED", "REMOVED"},  # 后来取得副本可升级
+    "ACQUIRED": {"STATIC_REVIEWED", "QUARANTINED", "STALE", "REMOVED"},
+    "STATIC_REVIEWED": {"RUNNABLE", "QUARANTINED", "STALE", "REMOVED"},
+    "QUARANTINED": {"STATIC_REVIEWED", "REMOVED"},  # 申诉/复审通过可解除隔离
+    "RUNNABLE": {"NEUTRAL_TESTED", "STALE", "REMOVED"},
+    "NEUTRAL_TESTED": {"NATIVE_TESTED", "VERIFIED", "STALE", "REMOVED"},
+    "NATIVE_TESTED": {"VERIFIED", "STALE", "REMOVED"},
+    "VERIFIED": {"STALE", "REMOVED"},
+    "STALE": {"ACQUIRED", "REMOVED"},  # 过期触发回归：重新取副本重测
+    "REMOVED": set(),  # 终态
 }
 
 

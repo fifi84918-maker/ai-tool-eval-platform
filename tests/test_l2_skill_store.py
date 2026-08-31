@@ -1,4 +1,4 @@
-"""Tests for L2 Skill Store and State Machine (V1A L2)."""
+"""Tests for L2 Skill Store and State Machine (V1A L2) - PRD Aligned."""
 
 import pytest
 from datetime import datetime, timezone
@@ -50,21 +50,22 @@ def test_canonical_skill_minimal_build():
 
 
 def test_11_states_enum():
-    """Test 2: 枚举 11 个状态值齐全。"""
+    """Test 2: 枚举 11 个 PRD 状态值齐全。"""
     from api.models.skill_state import ALLOWED_TRANSITIONS
     
+    # PRD 3.1 的 11 种准入状态
     expected_states = {
         "DISCOVERED",
+        "METADATA_ONLY",
         "ACQUIRED",
-        "PARSED",
-        "NORMALIZED",
-        "STATIC_SCANNED",
-        "SANDBOX_TESTED",
-        "SCORED",
-        "REVIEWED",
-        "PUBLISHED",
-        "DEPRECATED",
-        "ERROR"
+        "STATIC_REVIEWED",
+        "QUARANTINED",
+        "RUNNABLE",
+        "NEUTRAL_TESTED",
+        "NATIVE_TESTED",
+        "VERIFIED",
+        "STALE",
+        "REMOVED"
     }
     
     actual_states = set(ALLOWED_TRANSITIONS.keys())
@@ -73,39 +74,47 @@ def test_11_states_enum():
     assert len(actual_states) == 11
 
 
-def test_allowed_transition_discover_to_acquire():
-    """Test 3: 正向允许 DISCOVERED → ACQUIRED。"""
-    assert can_transition("DISCOVERED", "ACQUIRED") is True
+def test_discovered_to_metadata_only():
+    """Test 3: DISCOVERED → METADATA_ONLY（仅元数据路径）。"""
+    assert can_transition("DISCOVERED", "METADATA_ONLY") is True
     
     # Should not raise
-    validate_transition("DISCOVERED", "ACQUIRED")
+    validate_transition("DISCOVERED", "METADATA_ONLY")
 
 
-def test_blocked_transition_published_to_parsed():
-    """Test 4: 反向拒绝 PUBLISHED → PARSED。"""
-    assert can_transition("PUBLISHED", "PARSED") is False
+def test_quarantine_on_static_block():
+    """Test 4: ACQUIRED → QUARANTINED（静态审查发现问题隔离）。"""
+    assert can_transition("ACQUIRED", "QUARANTINED") is True
     
-    # Should raise
-    with pytest.raises(ValueError, match="Invalid state transition"):
-        validate_transition("PUBLISHED", "PARSED")
-
-
-def test_error_state_from_any():
-    """Test 5: ERROR 可从非终态进入。"""
-    # From any non-terminal state to ERROR is allowed
-    assert can_transition("DISCOVERED", "ERROR") is True
-    assert can_transition("ACQUIRED", "ERROR") is True
-    assert can_transition("PARSED", "ERROR") is True
-    assert can_transition("REVIEWED", "ERROR") is True
+    # QUARANTINED can be reviewed and go back to STATIC_REVIEWED
+    assert can_transition("QUARANTINED", "STATIC_REVIEWED") is True
     
-    # But not from terminal states
-    assert can_transition("PUBLISHED", "ERROR") is False
-    assert can_transition("DEPRECATED", "ERROR") is False
-    assert can_transition("ERROR", "ERROR") is False
+    # But cannot go to RUNNABLE directly
+    assert can_transition("QUARANTINED", "RUNNABLE") is False
+
+
+def test_stale_regression_path():
+    """Test 5: STALE → ACQUIRED（回归路径，环境过期重测）。"""
+    # This is NOT a backward transition, it's a regression path
+    assert can_transition("STALE", "ACQUIRED") is True
+    
+    # Should not raise
+    validate_transition("STALE", "ACQUIRED")
+
+
+def test_removed_is_terminal():
+    """Test 6: REMOVED 是终态（不能再流转）。"""
+    assert can_transition("REMOVED", "DISCOVERED") is False
+    assert can_transition("REMOVED", "ACQUIRED") is False
+    assert can_transition("REMOVED", "VERIFIED") is False
+    
+    # REMOVED has no outgoing transitions
+    from api.models.skill_state import ALLOWED_TRANSITIONS
+    assert ALLOWED_TRANSITIONS["REMOVED"] == set()
 
 
 def test_transition_writes_history():
-    """Test 6: state_history 追加一条 StateTransition。"""
+    """Test 7: state_history 追加一条 StateTransition。"""
     skill = CanonicalSkill(
         skill_id="hist123",
         name="History Test",
@@ -119,7 +128,7 @@ def test_transition_writes_history():
     put_skill(skill)
     
     # Transition to ACQUIRED
-    transition_state("hist123", "ACQUIRED", "Fetched from GitHub")
+    transition_state("hist123", "ACQUIRED", "Fetched full repository")
     
     # Get updated skill
     updated = get_skill("hist123")
@@ -131,12 +140,12 @@ def test_transition_writes_history():
     history_entry = updated.state_history[0]
     assert history_entry["from_state"] == "DISCOVERED"
     assert history_entry["to_state"] == "ACQUIRED"
-    assert history_entry["reason"] == "Fetched from GitHub"
+    assert history_entry["reason"] == "Fetched full repository"
     assert "at" in history_entry
 
 
 def test_skill_store_crud():
-    """Test 7: put/get/list_by_state 基本 CRUD。"""
+    """Test 8: put/get/list_by_state 基本 CRUD。"""
     # Put two skills with different states
     skill1 = CanonicalSkill(
         skill_id="skill1",
@@ -153,7 +162,7 @@ def test_skill_store_crud():
         name="Skill Two",
         description="Second skill",
         platform="doubao",
-        state="ACQUIRED",
+        state="VERIFIED",
         created_at=datetime.now(timezone.utc),
         updated_at=datetime.now(timezone.utc)
     )
@@ -175,13 +184,13 @@ def test_skill_store_crud():
     assert len(discovered) == 1
     assert discovered[0].skill_id == "skill1"
     
-    acquired = list_skills(filter_by_state="ACQUIRED")
-    assert len(acquired) == 1
-    assert acquired[0].skill_id == "skill2"
+    verified = list_skills(filter_by_state="VERIFIED")
+    assert len(verified) == 1
+    assert verified[0].skill_id == "skill2"
 
 
 def test_source_artifact_link():
-    """Test 8: source_refs/artifact_refs 能挂载。"""
+    """Test 9: source_refs/artifact_refs 能挂载。"""
     # Create skill
     skill = CanonicalSkill(
         skill_id="linked123",
