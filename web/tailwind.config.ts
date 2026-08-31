@@ -1,4 +1,5 @@
 import type { Config } from 'tailwindcss'
+import { theme } from './src/theme/tokens'
 
 const config: Config = {
   content: [
@@ -9,27 +10,19 @@ const config: Config = {
   theme: {
     extend: {
       colors: {
-        'primary': '#165DFF',
-        'primary-hover': '#4080FF',
-        'primary-light': 'rgba(22, 93, 255, 0.08)',
-        'text': {
-          'primary': '#1D2129',
-          'secondary': '#4E5969',
-          'tertiary': '#86909C',
-        },
-        'bg': {
-          'page': '#FFFFFF',
-          'card': '#F5F7FA',
-        },
-        'border': '#E5E6EB',
-        'grade': {
-          'a': '#00B42A',
-          'b': '#165DFF',
-          'c': '#FF7D00',
-          'd': '#F53F3F',
-          'u': '#86909C',
-        },
+        'primary': theme.colors.primary,
+        'primary-hover': theme.colors.primaryHover,
+        'primary-light': theme.colors.primaryLight,
+        'success': theme.colors.success,
+        'warning': theme.colors.warning,
+        'danger': theme.colors.danger,
+        'purple': theme.colors.purple,
+        'text': theme.colors.text,
+        'bg': theme.colors.bg,
+        'border': theme.colors.border,
+        'grade': theme.colors.grade,
       },
+      borderRadius: theme.radius,
     },
   },
   plugins: [],

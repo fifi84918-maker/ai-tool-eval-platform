@@ -2,16 +2,32 @@
 @tailwind components;
 @tailwind utilities;
 
+/* Design System CSS Variables - synced with theme/tokens.ts */
 :root {
+  /* Background */
   --bg-page: #FFFFFF;
   --bg-card: #F5F7FA;
+  
+  /* Primary colors */
   --color-primary: #165DFF;
   --color-primary-hover: #4080FF;
   --color-primary-light: rgba(22, 93, 255, 0.08);
+  
+  /* Text colors */
   --text-primary: #1D2129;
   --text-secondary: #4E5969;
   --text-tertiary: #86909C;
+  
+  /* Border */
   --border-color: #E5E6EB;
+  
+  /* Semantic colors */
+  --color-success: #00B42A;
+  --color-warning: #FF7D00;
+  --color-danger: #F53F3F;
+  --color-purple: #722ED1;
+  
+  /* Grade colors */
   --grade-a: #00B42A;
   --grade-b: #165DFF;
   --grade-c: #FF7D00;
