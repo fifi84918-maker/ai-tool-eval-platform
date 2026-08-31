@@ -1,8 +1,10 @@
 'use client'
 
-import { useState, useCallback } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
+
+// ── Types ────────────────────────────────────────────────────────────────────
 
 interface IngestResponse {
   discovered?: number
@@ -19,31 +21,36 @@ interface IngestResponse {
   warnings?: string[]
 }
 
-interface RunRecord {
-  id: number
+/** Matches IngestRunOut from GET /api/v1/ingest/runs */
+interface IngestRunOut {
+  run_id: string
   query: string
-  startedAt: string
+  started_at: string
+  finished_at: string | null
   discovered: number
   acquired: number
   reviewed: number
   quarantined: number
   runnable: number
-  errorCount: number
+  error_count: number
 }
+
+// ── Constants ─────────────────────────────────────────────────────────────────
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:8000'
 
 const STATE_COLORS: Record<string, { bg: string; text: string }> = {
-  discovered: { bg: 'bg-text-tertiary/10', text: 'text-text-tertiary' },
-  acquired:   { bg: 'bg-primary/10',        text: 'text-primary' },
-  reviewed:   { bg: 'bg-success/10',        text: 'text-success' },
-  quarantined:{ bg: 'bg-danger/10',         text: 'text-danger' },
-  runnable:   { bg: 'bg-purple/10',         text: 'text-purple' },
+  discovered:  { bg: 'bg-text-tertiary/10', text: 'text-text-tertiary' },
+  acquired:    { bg: 'bg-primary/10',        text: 'text-primary' },
+  reviewed:    { bg: 'bg-success/10',        text: 'text-success' },
+  quarantined: { bg: 'bg-danger/10',         text: 'text-danger' },
+  runnable:    { bg: 'bg-purple/10',         text: 'text-purple' },
 }
 
-let _runSeq = 0
+// ── Helpers ───────────────────────────────────────────────────────────────────
 
-function fmtTime(iso: string): string {
+function fmtTime(iso: string | null | undefined): string {
+  if (!iso) return '—'
   try {
     return new Date(iso).toLocaleString('zh-CN', {
       month: '2-digit', day: '2-digit',
@@ -54,15 +61,49 @@ function fmtTime(iso: string): string {
   }
 }
 
+// ── Component ─────────────────────────────────────────────────────────────────
+
 export default function IngestPage() {
   const router = useRouter()
+
+  // Ingest form state
   const [query, setQuery]   = useState('')
   const [limit, setLimit]   = useState<number>(5)
   const [loading, setLoading] = useState(false)
   const [error, setError]   = useState<string | null>(null)
   const [result, setResult] = useState<IngestResponse | null>(null)
-  const [runHistory, setRunHistory] = useState<RunRecord[]>([])
-  const [historyOpen, setHistoryOpen] = useState(false)
+
+  // History panel state
+  const [runs, setRuns]             = useState<IngestRunOut[]>([])
+  const [historyLoading, setHistoryLoading] = useState(true)
+  const [historyError, setHistoryError]     = useState<string | null>(null)
+  const [historyOpen, setHistoryOpen]       = useState(false)
+
+  // ── Fetch run history from API ─────────────────────────────────────────────
+
+  const loadRuns = useCallback(async () => {
+    setHistoryLoading(true)
+    setHistoryError(null)
+    try {
+      const res = await fetch(`${API_BASE_URL}/api/v1/ingest/runs?limit=20`)
+      if (!res.ok) {
+        throw new Error(`加载失败 (${res.status})`)
+      }
+      const data: IngestRunOut[] = await res.json()
+      setRuns(data)
+    } catch (err) {
+      setHistoryError(err instanceof Error ? err.message : '无法加载历史记录')
+    } finally {
+      setHistoryLoading(false)
+    }
+  }, [])
+
+  // Fetch on mount
+  useEffect(() => {
+    loadRuns()
+  }, [loadRuns])
+
+  // ── Handle ingest POST ─────────────────────────────────────────────────────
 
   const handleSubmit = useCallback(async (e: React.FormEvent) => {
     e.preventDefault()
@@ -71,8 +112,6 @@ export default function IngestPage() {
     setLoading(true)
     setError(null)
     setResult(null)
-
-    const startedAt = new Date().toISOString()
 
     try {
       // Try pipeline endpoint first; fall back to /ingest/github
@@ -121,32 +160,21 @@ export default function IngestPage() {
 
       setResult(normalized)
 
-      // Append to session-local run history
-      setRunHistory(prev => [
-        {
-          id:          ++_runSeq,
-          query:       query.trim(),
-          startedAt,
-          discovered:  normalized.discovered  ?? 0,
-          acquired:    normalized.acquired    ?? 0,
-          reviewed:    normalized.reviewed    ?? 0,
-          quarantined: normalized.quarantined ?? 0,
-          runnable:    normalized.runnable    ?? 0,
-          errorCount:  normalized.errors?.length ?? 0,
-        },
-        ...prev,
-      ].slice(0, 10)) // keep at most 10 in-session records
+      // Refresh history from API after a successful run
+      await loadRuns()
     } catch (err) {
       setError(err instanceof Error ? err.message : '未知错误')
     } finally {
       setLoading(false)
     }
-  }, [query, limit])
+  }, [query, limit, loadRuns])
 
   const handleRetry = () => {
     setError(null)
     handleSubmit(new Event('submit') as unknown as React.FormEvent)
   }
+
+  // ── Render ────────────────────────────────────────────────────────────────
 
   return (
     <div className="space-y-8">
@@ -269,11 +297,11 @@ export default function IngestPage() {
             <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4 mb-6">
               {(
                 [
-                  { key: 'discovered',  label: '已发现',  sub: 'DISCOVERED' },
-                  { key: 'acquired',    label: '已获取',  sub: 'ACQUIRED' },
+                  { key: 'discovered',  label: '已发现',   sub: 'DISCOVERED' },
+                  { key: 'acquired',    label: '已获取',   sub: 'ACQUIRED' },
                   { key: 'reviewed',    label: '审查通过', sub: 'STATIC_REVIEWED' },
-                  { key: 'quarantined', label: '已隔离',  sub: 'QUARANTINED' },
-                  { key: 'runnable',    label: '可运行',  sub: 'RUNNABLE' },
+                  { key: 'quarantined', label: '已隔离',   sub: 'QUARANTINED' },
+                  { key: 'runnable',    label: '可运行',   sub: 'RUNNABLE' },
                 ] as const
               ).map(({ key, label, sub }) => (
                 <div key={key} className={`${STATE_COLORS[key].bg} rounded-xl p-6 text-center`}>
@@ -384,63 +412,94 @@ export default function IngestPage() {
         </div>
       )}
 
-      {/* ─── Session Run History ─────────────────────────────────────────── */}
-      {/*
-        NOTE: The backend stores ingest_runs in SQLite (api/db/aux_store.py),
-        but no GET /api/v1/ingest/runs endpoint is currently registered in
-        api/routers/ingest.py.  Adding that route would require a backend
-        change (out of scope for this task).  We therefore show a session-local
-        log that is populated from successful in-page submissions.
-        Persistent cross-session history will be available once the backend
-        exposes GET /api/v1/ingest/runs.
-      */}
-      {runHistory.length > 0 && (
-        <div className="bg-white rounded-2xl border border-border shadow-sm overflow-hidden">
-          <button
-            onClick={() => setHistoryOpen(o => !o)}
-            className="w-full flex items-center justify-between px-8 py-5 hover:bg-bg-card transition-colors text-left"
-          >
-            <div className="flex items-center gap-3">
-              <span className="text-lg">🕐</span>
-              <span className="text-base font-semibold text-text-primary">
-                本次会话采集记录
-              </span>
+      {/* ─── Ingest Run History (from API) ───────────────────────────────────── */}
+      <div className="bg-white rounded-2xl border border-border shadow-sm overflow-hidden">
+        {/* Collapsible header — always visible */}
+        <button
+          onClick={() => setHistoryOpen(o => !o)}
+          className="w-full flex items-center justify-between px-8 py-5 hover:bg-bg-card transition-colors text-left"
+        >
+          <div className="flex items-center gap-3">
+            <span className="text-lg">🕐</span>
+            <span className="text-base font-semibold text-text-primary">
+              历史采集记录
+            </span>
+            {!historyLoading && !historyError && (
               <span className="text-xs px-2 py-0.5 rounded-full bg-primary/10 text-primary font-medium">
-                {runHistory.length}
+                {runs.length}
               </span>
-            </div>
-            <svg
-              className={`w-5 h-5 text-text-tertiary transition-transform ${historyOpen ? 'rotate-180' : ''}`}
-              fill="none" viewBox="0 0 24 24" stroke="currentColor"
-            >
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-            </svg>
-          </button>
+            )}
+            {historyLoading && (
+              <span className="text-xs text-text-tertiary">加载中...</span>
+            )}
+          </div>
+          <svg
+            className={`w-5 h-5 text-text-tertiary transition-transform ${historyOpen ? 'rotate-180' : ''}`}
+            fill="none" viewBox="0 0 24 24" stroke="currentColor"
+          >
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+          </svg>
+        </button>
 
-          {historyOpen && (
-            <div className="border-t border-border">
+        {historyOpen && (
+          <div className="border-t border-border">
+            {/* Loading skeleton */}
+            {historyLoading && (
+              <div className="px-8 py-6 space-y-3">
+                {[1, 2, 3].map(i => (
+                  <div key={i} className="h-10 bg-bg-card rounded-lg animate-pulse" />
+                ))}
+              </div>
+            )}
+
+            {/* Error state — non-blocking */}
+            {!historyLoading && historyError && (
+              <div className="px-8 py-6 flex items-center gap-3 text-text-secondary">
+                <span className="text-warning text-xl">⚠️</span>
+                <div className="flex-1">
+                  <p className="text-sm">无法加载历史记录：{historyError}</p>
+                </div>
+                <button
+                  onClick={loadRuns}
+                  className="px-3 py-1.5 text-sm text-primary border border-primary/30 rounded-lg hover:bg-primary/5 transition-colors"
+                >
+                  重试
+                </button>
+              </div>
+            )}
+
+            {/* Empty state */}
+            {!historyLoading && !historyError && runs.length === 0 && (
+              <div className="px-8 py-8 text-center">
+                <p className="text-text-tertiary text-sm">暂无采集记录</p>
+                <p className="text-text-tertiary text-xs mt-1">
+                  完成首次采集后，记录将出现在这里
+                </p>
+              </div>
+            )}
+
+            {/* History table */}
+            {!historyLoading && !historyError && runs.length > 0 && (
               <table className="w-full text-sm">
                 <thead>
                   <tr className="bg-bg-card text-text-tertiary text-xs uppercase tracking-wide">
-                    <th className="px-6 py-3 text-left font-medium">#</th>
                     <th className="px-6 py-3 text-left font-medium">关键词</th>
                     <th className="px-6 py-3 text-center font-medium">发现</th>
                     <th className="px-6 py-3 text-center font-medium">获取</th>
                     <th className="px-6 py-3 text-center font-medium">审查</th>
                     <th className="px-6 py-3 text-center font-medium text-danger">隔离</th>
                     <th className="px-6 py-3 text-center font-medium text-purple">可用</th>
-                    <th className="px-6 py-3 text-left font-medium">时间</th>
+                    <th className="px-6 py-3 text-left font-medium">开始时间</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-border">
-                  {runHistory.map((run) => (
-                    <tr key={run.id} className="hover:bg-bg-card/60 transition-colors">
-                      <td className="px-6 py-3 text-text-tertiary">{run.id}</td>
-                      <td className="px-6 py-3 text-text-primary max-w-[200px] truncate font-medium">
-                        {run.query}
-                        {run.errorCount > 0 && (
+                  {runs.map((run) => (
+                    <tr key={run.run_id} className="hover:bg-bg-card/60 transition-colors">
+                      <td className="px-6 py-3 max-w-[200px] truncate">
+                        <span className="font-medium text-text-primary">{run.query}</span>
+                        {run.error_count > 0 && (
                           <span className="ml-2 text-xs text-warning">
-                            ({run.errorCount} 错)
+                            ({run.error_count} 错)
                           </span>
                         )}
                       </td>
@@ -450,19 +509,20 @@ export default function IngestPage() {
                       <td className="px-6 py-3 text-center text-danger">{run.quarantined}</td>
                       <td className="px-6 py-3 text-center text-purple">{run.runnable}</td>
                       <td className="px-6 py-3 text-text-tertiary whitespace-nowrap">
-                        {fmtTime(run.startedAt)}
+                        {fmtTime(run.started_at)}
                       </td>
                     </tr>
                   ))}
                 </tbody>
               </table>
-              <p className="px-6 py-3 text-xs text-text-tertiary border-t border-border">
-                仅显示本次会话内的采集记录（最多 10 条）。跨会话持久历史需后端开放 GET /api/v1/ingest/runs。
-              </p>
-            </div>
-          )}
-        </div>
-      )}
+            )}
+
+            <p className="px-6 py-3 text-xs text-text-tertiary border-t border-border">
+              采集记录从服务端持久存储读取，显示最近 20 条。
+            </p>
+          </div>
+        )}
+      </div>
     </div>
   )
 }
