@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import Link from 'next/link'
 import GradeBadge from '@/components/skill/GradeBadge'
 
@@ -49,6 +49,13 @@ export default function RecommendPage() {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [recommendations, setRecommendations] = useState<RecommendationResponse | null>(null)
+  const [savedToast, setSavedToast] = useState(false)
+  const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  // Clean up toast timer on unmount
+  useEffect(() => {
+    return () => { if (toastTimer.current) clearTimeout(toastTimer.current) }
+  }, [])
 
   // Available options
   const DOMAIN_OPTIONS = ['web', 'mobile', 'data-science', 'devops', 'security', 'documentation']
@@ -117,6 +124,10 @@ export default function RecommendPage() {
 
       const data: RecommendationResponse = await response.json()
       setRecommendations(data)
+      // Weak toast: the backend has already persisted this response to recommend_history
+      setSavedToast(true)
+      if (toastTimer.current) clearTimeout(toastTimer.current)
+      toastTimer.current = setTimeout(() => setSavedToast(false), 4000)
     } catch (err) {
       // console.error('推荐请求失败:', err)
       setError(err instanceof Error ? err.message : '未知错误')
@@ -316,9 +327,20 @@ export default function RecommendPage() {
             <h2 className="text-2xl font-bold text-text-primary">
               推荐结果
             </h2>
-            <span className="text-sm text-text-secondary">
-              共 {recommendations.total} 个推荐方案
-            </span>
+            <div className="flex items-center gap-3">
+              {/* Weak saved toast - fades out automatically */}
+              {savedToast && (
+                <span className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-success/10 border border-success/20 text-success text-sm font-medium transition-opacity">
+                  <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" />
+                  </svg>
+                  推荐已保存
+                </span>
+              )}
+              <span className="text-sm text-text-secondary">
+                共 {recommendations.total} 个推荐方案
+              </span>
+            </div>
           </div>
 
           {/* Recommendation Cards */}

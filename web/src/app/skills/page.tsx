@@ -43,6 +43,7 @@ const STATE_LABELS: Record<string, string> = {
 export default function SkillsPage() {
   const [skills, setSkills] = useState<SkillSummary[]>([])
   const [loading, setLoading] = useState(true)
+  const [refreshing, setRefreshing] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [stateFilter, setStateFilter] = useState<string>('all')
   const [total, setTotal] = useState(0)
@@ -51,8 +52,12 @@ export default function SkillsPage() {
     loadSkills()
   }, [])
 
-  const loadSkills = async () => {
-    setLoading(true)
+  const loadSkills = async (silent = false) => {
+    if (silent) {
+      setRefreshing(true)
+    } else {
+      setLoading(true)
+    }
     setError(null)
     
     try {
@@ -85,6 +90,7 @@ export default function SkillsPage() {
       setError(err instanceof Error ? err.message : '未知错误')
     } finally {
       setLoading(false)
+      setRefreshing(false)
     }
   }
 
@@ -118,7 +124,7 @@ export default function SkillsPage() {
               <h3 className="text-lg font-semibold text-warning mb-2">接口未就绪</h3>
               <p className="text-sm text-text-secondary mb-4">{error}</p>
               <button
-                onClick={loadSkills}
+                onClick={() => loadSkills()}
                 className="px-4 py-2 bg-primary text-white rounded-lg hover:bg-primary-hover transition-colors text-sm font-medium"
               >
                 重试
@@ -164,9 +170,27 @@ export default function SkillsPage() {
             <h1 className="text-3xl font-bold text-text-primary mb-2">技能列表</h1>
             <p className="text-text-secondary">浏览和管理所有已采集的技能</p>
           </div>
-          <div className="text-right">
-            <div className="text-3xl font-bold text-primary">{total}</div>
-            <div className="text-sm text-text-tertiary">总技能数</div>
+          <div className="flex items-center gap-4">
+            {/* Manual refresh button */}
+            <button
+              onClick={() => loadSkills(true)}
+              disabled={refreshing}
+              title="刷新列表"
+              className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-text-secondary border border-border rounded-lg hover:bg-bg-card hover:text-text-primary transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              <svg
+                className={`w-4 h-4 ${refreshing ? 'animate-spin' : ''}`}
+                fill="none" viewBox="0 0 24 24" stroke="currentColor"
+              >
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+                  d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+              </svg>
+              {refreshing ? '刷新中...' : '刷新'}
+            </button>
+            <div className="text-right">
+              <div className="text-3xl font-bold text-primary">{total}</div>
+              <div className="text-sm text-text-tertiary">总技能数</div>
+            </div>
           </div>
         </div>
 
