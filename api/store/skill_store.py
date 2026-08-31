@@ -53,6 +53,7 @@ def _skill_to_row(skill: CanonicalSkill) -> dict:
         "required_languages": json.dumps(skill.required_languages),
         "cost_info":         json.dumps(skill.cost_info) if skill.cost_info is not None else None,
         "benchmark_score":   skill.benchmark_score,
+        "dynamic_score":     skill.dynamic_score,
         "certification":     skill.certification,
         "state":             skill.state,
         "state_history":     _json_dumps(skill.state_history),
@@ -80,6 +81,7 @@ def _row_to_skill(row) -> CanonicalSkill:
         required_languages=_json_loads_safe(d.get("required_languages"), []),
         cost_info=_json_loads_safe(d.get("cost_info"), None),
         benchmark_score=d.get("benchmark_score"),
+        dynamic_score=d.get("dynamic_score"),
         certification=d.get("certification"),
         state=d["state"],
         state_history=_json_loads_safe(d.get("state_history"), []),
@@ -151,14 +153,14 @@ def put_skill(skill: CanonicalSkill) -> None:
             skill_id, name, description, platform, platform_skill_id,
             underlying_model, license, security_level, high_risk,
             target_domains, required_languages, cost_info, benchmark_score,
-            certification, state, state_history, created_at, updated_at,
-            source_refs, artifact_refs
+            dynamic_score, certification, state, state_history, created_at,
+            updated_at, source_refs, artifact_refs
         ) VALUES (
             :skill_id, :name, :description, :platform, :platform_skill_id,
             :underlying_model, :license, :security_level, :high_risk,
             :target_domains, :required_languages, :cost_info, :benchmark_score,
-            :certification, :state, :state_history, :created_at, :updated_at,
-            :source_refs, :artifact_refs
+            :dynamic_score, :certification, :state, :state_history, :created_at,
+            :updated_at, :source_refs, :artifact_refs
         )
         ON CONFLICT(skill_id) DO UPDATE SET
             name              = excluded.name,
@@ -173,6 +175,7 @@ def put_skill(skill: CanonicalSkill) -> None:
             required_languages= excluded.required_languages,
             cost_info         = excluded.cost_info,
             benchmark_score   = excluded.benchmark_score,
+            dynamic_score     = excluded.dynamic_score,
             certification     = excluded.certification,
             state             = excluded.state,
             state_history     = excluded.state_history,

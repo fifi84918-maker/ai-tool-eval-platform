@@ -1,12 +1,18 @@
 """Ingest Pipeline Orchestrator for L5 (V1A L5).
 
-Orchestrates L1 → L3 → L4 pipeline: discover → fetch → scan → score.
+Orchestrates L1 → L3 → L4 → V1D pipeline:
+  discover → fetch → scan → benchmark-score → [dynamic-check (opt-in)]
 """
+
+import os
+import logging
 
 from api.adapters.github import GitHubAdapter, FakeGitHubFetcher
 from api.scanners.static_scan import static_scan_skill
 from api.scorer.benchmark import score_skill
-from api.store import get_skill
+from api.store import get_skill, put_skill
+
+logger = logging.getLogger(__name__)
 
 
 def run_pipeline(query: str, limit: int = 5, fetcher=None) -> dict:
@@ -82,10 +88,38 @@ def run_pipeline(query: str, limit: int = 5, fetcher=None) -> dict:
                 
                 # Add to skills list (with score)
                 skill = get_skill(skill_id)
+
+                # Stage 5 (V1D): Dynamic check — opt-in via DYNAMIC_SCORING=enabled
+                dynamic_score = None
+                if os.environ.get("DYNAMIC_SCORING", "disabled").lower() == "enabled":
+                    try:
+                        from api.scoring.dynamic import DynamicExecutor
+                        skill_md_content = ""
+                        for a in list(artifacts or []):
+                            if hasattr(a, "kind") and a.kind == "skill_md":
+                                skill_md_content = a.path_or_text
+                                break
+                        dyn_result = DynamicExecutor().run_skill_check({
+                            "skill_id": skill_id,
+                            "skill_md": skill_md_content,
+                        })
+                        dynamic_score = dyn_result.score
+                        if dynamic_score is not None:
+                            skill.dynamic_score = dynamic_score
+                            put_skill(skill)
+                            skill = get_skill(skill_id)
+                        logger.info(
+                            "dynamic check skill=%s score=%s duration=%.0fms",
+                            skill_id[:12], dynamic_score, dyn_result.duration_ms,
+                        )
+                    except Exception as exc:
+                        logger.warning("dynamic check failed for %s: %s", skill_id, exc)
+
                 report["skills"].append({
                     "skill_id": skill_id,
                     "name": skill.name,
                     "benchmark_score": skill.benchmark_score,
+                    "dynamic_score": dynamic_score,
                     "state": "RUNNABLE",
                 })
         

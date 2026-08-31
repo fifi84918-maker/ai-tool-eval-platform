@@ -39,6 +39,7 @@ class CanonicalSkill(BaseModel):
     required_languages: list[str] = []
     cost_info: dict | None = None
     benchmark_score: float | None = None   # L4 再填
+    dynamic_score: float | None = None    # V1D 动态检查评分（opt-in）
     certification: str | None = None
     
     # State machine

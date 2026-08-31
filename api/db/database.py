@@ -184,7 +184,38 @@ CREATE TABLE IF NOT EXISTS search_cache (
 def _init_schema(conn: sqlite3.Connection) -> None:
     """Create all tables (internal, called once per new connection)."""
     conn.executescript(DDL)
+    # Idempotent column additions for schema evolution
+    _ensure_columns(conn)
     conn.commit()
+
+
+def _ensure_columns(conn: sqlite3.Connection) -> None:
+    """Add any missing columns introduced after initial table creation.
+
+    Uses ALTER TABLE ... ADD COLUMN which is idempotent when guarded by
+    a column-existence check.  Never drops or modifies existing columns.
+    """
+    _add_column_if_missing(conn, "skills", "dynamic_score", "REAL")
+
+
+def _add_column_if_missing(
+    conn: sqlite3.Connection,
+    table: str,
+    column: str,
+    col_type: str,
+) -> None:
+    """ALTER TABLE ADD COLUMN only if the column does not already exist."""
+    existing = {
+        row[1]
+        for row in conn.execute(f"PRAGMA table_info({table})").fetchall()
+    }
+    if column not in existing:
+        conn.execute(f"ALTER TABLE {table} ADD COLUMN {column} {col_type}")
+        logger.debug("Added column %s.%s (%s)", table, column, col_type)
+
+
+import logging as _logging
+logger = _logging.getLogger(__name__)
 
 
 def init_db(conn: sqlite3.Connection | None = None) -> None:
